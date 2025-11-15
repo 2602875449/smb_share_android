@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 基础颜色 -->
+    <color name="background">#262624</color>
+    <color name="foreground">#C3C0B6</color>
+    
+    <!-- 卡片颜色 -->
+    <color name="card">#262624</color>
+    <color name="card_foreground">#FAF9F5</color>
+    
+    <!-- 弹出层颜色 -->
+    <color name="popover">#30302E</color>
+    <color name="popover_foreground">#E5E5E2</color>
+    
+    <!-- 主色调 -->
+    <color name="primary">#D97757</color>
+    <color name="primary_foreground">#FFFFFF</color>
+    
+    <!-- 次要颜色 -->
+    <color name="secondary">#FAF9F5</color>
+    <color name="secondary_foreground">#30302E</color>
+    
+    <!-- 静音/禁用颜色 -->
+    <color name="muted">#1B1B19</color>
+    <color name="muted_foreground">#B7B5A9</color>
+    
+    <!-- 强调色 -->
+    <color name="accent">#1A1915</color>
+    <color name="accent_foreground">#F5F4EE</color>
+    
+    <!-- 破坏性操作颜色 -->
+    <color name="destructive">#EF4444</color>
+    <color name="destructive_foreground">#FFFFFF</color>
+    
+    <!-- 边框和输入框颜色 -->
+    <color name="border">#3E3E38</color>
+    <color name="input">#52514A</color>
+    <color name="ring">#D97757</color>
+    
+    <!-- 图表颜色 -->
+    <color name="chart_1">#B05730</color>
+    <color name="chart_2">#9C87F5</color>
+    <color name="chart_3">#1A1915</color>
+    <color name="chart_4">#2F2B48</color>
+    <color name="chart_5">#B4552D</color>
+    
+    <!-- 侧边栏颜色 -->
+    <color name="sidebar">#1F1E1D</color>
+    <color name="sidebar_foreground">#C3C0B6</color>
+    <color name="sidebar_primary">#343434</color>
+    <color name="sidebar_primary_foreground">#FBFBFB</color>
+    <color name="sidebar_accent">#0F0F0E</color>
+    <color name="sidebar_accent_foreground">#C3C0B6</color>
+    <color name="sidebar_border">#EBEBEB</color>
+    <color name="sidebar_ring">#B5B5B5</color>
+</resources>
+
