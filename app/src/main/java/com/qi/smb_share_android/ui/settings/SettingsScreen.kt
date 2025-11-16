@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -76,7 +77,7 @@ fun SettingsScreen(
             if (onNavigateToOnboarding != null) {
                 item {
                     SettingsItem(
-                        icon = Icons.Default.Help,
+                        icon = Icons.AutoMirrored.Filled.Help,
                         title = "查看引导教程",
                         subtitle = "重新查看应用使用说明",
                         onClick = onNavigateToOnboarding

@@ -80,7 +80,7 @@ class SMBConnectionManager {
      */
     fun isConnected(): Boolean {
         return try {
-            diskShare?.isConnected() == true
+            diskShare?.isConnected == true
         } catch (e: Exception) {
             false
         }
@@ -136,7 +136,7 @@ class SMBConnectionManager {
             Log.d(TAG, "[步骤1] 正在连接到服务器 ${config.serverAddress}:${config.port}...")
             testConnection = client.connect(config.serverAddress, config.port)
             Log.d(TAG, "[步骤1] ✓ 连接创建成功")
-            Log.d(TAG, "连接状态: ${testConnection.isConnected()}")
+            Log.d(TAG, "连接状态: ${testConnection.isConnected}")
             Log.d(TAG, "远程主机名: ${testConnection.remoteHostname}")
             val connectionContext = testConnection.connectionContext
             if (connectionContext != null) {
@@ -176,7 +176,7 @@ class SMBConnectionManager {
             
             // 步骤5: 检查连接状态
             Log.d(TAG, "[步骤5] 正在检查连接状态...")
-            val isConnected = testShare.isConnected()
+            val isConnected = testShare.isConnected
             Log.d(TAG, "[步骤5] ✓ 连接状态检查完成: $isConnected")
             
             if (isConnected) {

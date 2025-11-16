@@ -53,7 +53,7 @@ class FileListViewModel(
                     isDownloading = downloadItem?.status == com.qi.smb_share_android.data.model.DownloadStatus.DOWNLOADING
                 )
                 if (downloadItem?.status == com.qi.smb_share_android.data.model.DownloadStatus.COMPLETED) {
-                    downloadItem.localPath?.let { path ->
+                    downloadItem.localPath.let { path ->
                         _state.value = _state.value.copy(
                             downloadedFile = File(path)
                         )

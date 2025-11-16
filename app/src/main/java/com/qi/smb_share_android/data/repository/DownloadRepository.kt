@@ -1,6 +1,7 @@
 package com.qi.smb_share_android.data.repository
 
 import android.content.Context
+import android.os.Environment
 import android.util.Log
 import com.qi.smb_share_android.data.local.DataStoreManager
 import com.qi.smb_share_android.data.model.DownloadItem
@@ -12,8 +13,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -30,6 +29,31 @@ class DownloadRepository(private val context: Context) {
         .map { it.sortedByDescending { item -> item.timestamp } }
 
     /**
+     * 获取下载目录
+     * 优先使用系统公共下载目录，如果不可用则使用应用私有目录
+     */
+    private fun getDownloadDirectory(): File {
+        // 尝试使用系统公共下载目录
+        val publicDownloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val appDownloadDir = File(publicDownloadDir, "SMBShare")
+        
+        return if (publicDownloadDir.exists() || publicDownloadDir.mkdirs()) {
+            // 在公共下载目录下创建应用专属文件夹
+            if (!appDownloadDir.exists()) {
+                appDownloadDir.mkdirs()
+            }
+            appDownloadDir
+        } else {
+            // 如果公共目录不可用，使用应用私有目录作为备选
+            val privateDir = File(context.getExternalFilesDir(null), "downloads")
+            if (!privateDir.exists()) {
+                privateDir.mkdirs()
+            }
+            privateDir
+        }
+    }
+
+    /**
      * 下载文件
      */
     suspend fun downloadFile(
@@ -41,11 +65,8 @@ class DownloadRepository(private val context: Context) {
         Log.d(TAG, "开始下载文件: $fileName")
         Log.d(TAG, "远程路径: $remotePath")
         
-        val downloadDir = File(context.getExternalFilesDir(null), "downloads")
-        if (!downloadDir.exists()) {
-            Log.d(TAG, "创建下载目录: ${downloadDir.absolutePath}")
-            downloadDir.mkdirs()
-        }
+        val downloadDir = getDownloadDirectory()
+        Log.d(TAG, "下载目录: ${downloadDir.absolutePath}")
 
         val localFile = File(downloadDir, fileName)
         Log.d(TAG, "本地保存路径: ${localFile.absolutePath}")

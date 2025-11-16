@@ -9,8 +9,8 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 
 /**
  * 权限管理工具类
@@ -50,9 +50,13 @@ class PermissionManager(
         }
         
         // 检查是否有权限被永久拒绝
+        // 注意：只有在用户明确拒绝过权限后，才会被判定为永久拒绝
         val anyPermanentlyDenied = permissions.any { permission ->
-            !activity.shouldShowRequestPermissionRationale(permission) &&
-            ContextCompat.checkSelfPermission(activity, permission) != PackageManager.PERMISSION_GRANTED
+            val isGranted = ContextCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED
+            val shouldShow = activity.shouldShowRequestPermissionRationale(permission)
+            // 只有当权限未授予且不应该显示说明（用户选择了"不再询问"）时，才判定为永久拒绝
+            // 但首次请求时，shouldShow 也是 false，所以需要额外判断
+            !isGranted && !shouldShow && hasRequestedPermissionBefore(permission)
         }
         
         return if (anyPermanentlyDenied) {
@@ -60,6 +64,23 @@ class PermissionManager(
         } else {
             PermissionStatus.DENIED
         }
+    }
+    
+    /**
+     * 检查是否曾经请求过该权限
+     * 通过 SharedPreferences 记录权限请求历史
+     */
+    private fun hasRequestedPermissionBefore(permission: String): Boolean {
+        val prefs = activity.getSharedPreferences("permission_prefs", Context.MODE_PRIVATE)
+        return prefs.getBoolean("requested_$permission", false)
+    }
+    
+    /**
+     * 记录权限请求历史
+     */
+    private fun markPermissionAsRequested(permission: String) {
+        val prefs = activity.getSharedPreferences("permission_prefs", Context.MODE_PRIVATE)
+        prefs.edit { putBoolean("requested_$permission", true) }
     }
     
     /**
@@ -78,6 +99,8 @@ class PermissionManager(
         this.onPermanentlyDeniedCallback = onPermanentlyDenied
         
         val permissions = getStoragePermissions()
+        // 记录权限请求历史
+        permissions.forEach { markPermissionAsRequested(it) }
         permissionLauncher.launch(permissions)
     }
     

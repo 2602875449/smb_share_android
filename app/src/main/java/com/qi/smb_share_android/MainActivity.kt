@@ -1,5 +1,6 @@
 package com.qi.smb_share_android
 
+import android.annotation.SuppressLint
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -78,11 +79,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@SuppressLint("ContextCastToActivity")
 @Composable
 fun AppContent(onInstallApk: (File) -> Unit) {
     var selectedTab by remember { mutableStateOf(NavigationTab.CONNECTION) }
     var currentConfig: SMBConfig? by remember { mutableStateOf(null) }
-    var editConfig: SMBConfig? by remember { mutableStateOf<SMBConfig?>(null) }
+    var editConfig: SMBConfig? by remember { mutableStateOf(null) }
     var showEditScreen by remember { mutableStateOf(false) }
     var initialPath by remember { mutableStateOf("") }
     var isRestoringLastAccess by remember { mutableStateOf(true) }
@@ -90,7 +92,7 @@ fun AppContent(onInstallApk: (File) -> Unit) {
     val connectionViewModel: ConnectionViewModel = viewModel()
     val downloadHistoryViewModel: DownloadHistoryViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
-    val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.activity.ComponentActivity
+    val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
     val context = androidx.compose.ui.platform.LocalContext.current
 
     // 监听连接配置列表加载
@@ -117,7 +119,7 @@ fun AppContent(onInstallApk: (File) -> Unit) {
             } else {
                 isRestoringLastAccess = false
             }
-        } else if (isRestoringLastAccess && connectionState.savedConfigs.isEmpty()) {
+        } else if (isRestoringLastAccess) {
             // 如果配置列表为空，也停止恢复尝试
             isRestoringLastAccess = false
         }

@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 应用私有下载目录 -->
     <external-files-path
-        name="downloads"
+        name="app_downloads"
         path="downloads/" />
+    
+    <!-- 系统公共下载目录 -->
+    <external-path
+        name="public_downloads"
+        path="Download/SMBShare/" />
+    
+    <!-- 整个外部存储根目录（备用） -->
+    <external-path
+        name="external_storage"
+        path="." />
 </paths>
 

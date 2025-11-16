@@ -4,11 +4,9 @@ import android.util.Log
 import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.msfscc.FileAttributes
 import com.hierynomus.mssmb2.SMB2ShareAccess
-import com.hierynomus.smbj.share.DiskShare
 import com.hierynomus.smbj.share.File
 import com.qi.smb_share_android.data.local.SMBConnectionManager
 import com.qi.smb_share_android.data.model.FileItem
-import com.qi.smb_share_android.data.model.SMBConfig
 import java.io.IOException
 import java.util.Date
 
@@ -332,13 +330,13 @@ class SMBFileRepository(private val connectionManager: SMBConnectionManager) {
             }
             Log.d(TAG, "规范化后的路径: $normalizedOldPath -> $newPath")
             
-            // 打开文件或文件夹
+            // 打开文件或文件夹（需要 DELETE 权限才能重命名）
             val diskEntry = try {
                 diskShare.openFile(
                     normalizedOldPath,
-                    setOf(AccessMask.GENERIC_READ, AccessMask.GENERIC_WRITE),
+                    setOf(AccessMask.GENERIC_READ, AccessMask.GENERIC_WRITE, AccessMask.DELETE),
                     null,
-                    setOf(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
+                    setOf(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE, SMB2ShareAccess.FILE_SHARE_DELETE),
                     null,
                     null
                 )
@@ -346,9 +344,9 @@ class SMBFileRepository(private val connectionManager: SMBConnectionManager) {
                 // 如果作为文件打开失败，尝试作为文件夹打开
                 diskShare.openDirectory(
                     normalizedOldPath,
-                    setOf(AccessMask.GENERIC_READ, AccessMask.GENERIC_WRITE),
+                    setOf(AccessMask.GENERIC_READ, AccessMask.GENERIC_WRITE, AccessMask.DELETE),
                     null,
-                    setOf(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
+                    setOf(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE, SMB2ShareAccess.FILE_SHARE_DELETE),
                     null,
                     null
                 )

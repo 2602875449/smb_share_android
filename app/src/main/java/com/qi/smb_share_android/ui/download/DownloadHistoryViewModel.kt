@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.core.net.toUri
 
 private const val TAG = "DownloadHistoryViewModel"
 
@@ -93,7 +94,12 @@ class DownloadHistoryViewModel(application: Application) : AndroidViewModel(appl
         
         try {
             val context = getApplication<Application>()
-            val uri = Uri.parse("content://com.android.externalstorage.documents/document/primary:${parentDir.absolutePath.replace("/storage/emulated/0/", "")}")
+            val uri = "content://com.android.externalstorage.documents/document/primary:${
+                parentDir.absolutePath.replace(
+                    "/storage/emulated/0/",
+                    ""
+                )
+            }".toUri()
             
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "resource/folder")
@@ -106,7 +112,7 @@ class DownloadHistoryViewModel(application: Application) : AndroidViewModel(appl
             try {
                 val context = getApplication<Application>()
                 val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(Uri.parse("file://${parentDir.absolutePath}"), "resource/folder")
+                    setDataAndType("file://${parentDir.absolutePath}".toUri(), "resource/folder")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(intent)
