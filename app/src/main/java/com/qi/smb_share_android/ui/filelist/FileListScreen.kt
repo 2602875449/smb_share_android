@@ -2,6 +2,7 @@ package com.qi.smb_share_android.ui.filelist
 
 import androidx.compose.ui.graphics.Color
 import android.content.Intent
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,11 +18,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qi.smb_share_android.data.model.FileItem
+import com.qi.smb_share_android.ui.components.PermissionPermanentlyDeniedDialog
+import com.qi.smb_share_android.ui.components.PermissionRationaleDialog
+import com.qi.smb_share_android.ui.components.PermissionType
 import com.qi.smb_share_android.util.FileTypeHelper
+import com.qi.smb_share_android.util.PermissionManager
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,8 +45,90 @@ fun FileListScreen(
     var folderName by remember { mutableStateOf("") }
     var renameName by remember { mutableStateOf("") }
     var showFabMenu by remember { mutableStateOf(false) }
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+    val focusManager = LocalFocusManager.current
+    val searchFocusRequester = remember { FocusRequester() }
+    
+    // 权限相关状态
+    var showPermissionRationale by remember { mutableStateOf(false) }
+    var showPermissionDenied by remember { mutableStateOf(false) }
+    var permissionType by remember { mutableStateOf(PermissionType.STORAGE_DOWNLOAD) }
+    var pendingDownloadFile by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var pendingUploadFile by remember { mutableStateOf<File?>(null) }
+    
+    // 权限管理器引用 - 用于在启动器回调中访问
+    var permissionManagerRef by remember { mutableStateOf<PermissionManager?>(null) }
+    
+    // 权限请求启动器 - 必须在 Composable 顶层创建
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // 处理权限请求结果
+        permissionManagerRef?.handlePermissionResult(permissions)
+    }
+    
+    // 权限管理器 - 使用启动器创建
+    val permissionManager = remember(activity, permissionLauncher) {
+        activity?.let { 
+            PermissionManager(it, permissionLauncher).also { 
+                permissionManagerRef = it 
+            }
+        }
+    }
 
+    // 权限检查和下载文件的辅助函数
+    val checkPermissionAndDownload = { filePath: String, fileName: String ->
+        permissionManager?.let { pm ->
+            when (pm.checkStoragePermission()) {
+                PermissionManager.PermissionStatus.GRANTED -> {
+                    // 权限已授予，直接下载
+                    viewModel.handleIntent(FileListIntent.DownloadFile(filePath, fileName))
+                }
+                PermissionManager.PermissionStatus.DENIED -> {
+                    // 需要请求权限
+                    pendingDownloadFile = Pair(filePath, fileName)
+                    permissionType = PermissionType.STORAGE_DOWNLOAD
+                    showPermissionRationale = true
+                }
+                PermissionManager.PermissionStatus.PERMANENTLY_DENIED -> {
+                    // 权限被永久拒绝
+                    permissionType = PermissionType.STORAGE_DOWNLOAD
+                    showPermissionDenied = true
+                }
+            }
+        } ?: run {
+            // 如果无法获取权限管理器，直接尝试下载
+            viewModel.handleIntent(FileListIntent.DownloadFile(filePath, fileName))
+        }
+    }
+    
+    // 权限检查和上传文件的辅助函数
+    val checkPermissionAndUpload = { file: File ->
+        permissionManager?.let { pm ->
+            when (pm.checkStoragePermission()) {
+                PermissionManager.PermissionStatus.GRANTED -> {
+                    // 权限已授予，直接上传
+                    viewModel.handleIntent(FileListIntent.UploadFile(file))
+                }
+                PermissionManager.PermissionStatus.DENIED -> {
+                    // 需要请求权限
+                    pendingUploadFile = file
+                    permissionType = PermissionType.STORAGE_UPLOAD
+                    showPermissionRationale = true
+                }
+                PermissionManager.PermissionStatus.PERMANENTLY_DENIED -> {
+                    // 权限被永久拒绝
+                    permissionType = PermissionType.STORAGE_UPLOAD
+                    showPermissionDenied = true
+                }
+            }
+        } ?: run {
+            // 如果无法获取权限管理器，直接尝试上传
+            viewModel.handleIntent(FileListIntent.UploadFile(file))
+        }
+    }
+    
     // 文件选择器
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -51,7 +142,8 @@ fun FileListScreen(
                     input.copyTo(output)
                 }
             }
-            viewModel.handleIntent(FileListIntent.UploadFile(tempFile))
+            // 使用权限检查函数
+            checkPermissionAndUpload(tempFile)
         }
     }
 
@@ -202,7 +294,9 @@ fun FileListScreen(
                             },
                             placeholder = { Text("搜索文件...") },
                             singleLine = true,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(searchFocusRequester),
                             leadingIcon = {
                                 Icon(Icons.Default.Search, contentDescription = "搜索")
                             },
@@ -212,6 +306,7 @@ fun FileListScreen(
                                         viewModel.handleIntent(
                                             FileListIntent.UpdateSearchQuery("")
                                         )
+                                        focusManager.clearFocus()
                                     }) {
                                         Icon(Icons.Default.Clear, contentDescription = "清除")
                                     }
@@ -249,7 +344,15 @@ fun FileListScreen(
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                // 点击列表空白区域时清除焦点，关闭键盘
+                                focusManager.clearFocus()
+                            },
                         contentPadding = PaddingValues(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -257,6 +360,8 @@ fun FileListScreen(
                             FileItemRow(
                                 file = file,
                                 onClick = {
+                                    // 清除搜索框焦点
+                                    focusManager.clearFocus()
                                     if (file.isDirectory) {
                                         viewModel.handleIntent(FileListIntent.EnterDirectory(file.name))
                                     } else {
@@ -265,6 +370,8 @@ fun FileListScreen(
                                     }
                                 },
                                 onLongClick = {
+                                    // 清除搜索框焦点
+                                    focusManager.clearFocus()
                                     // 长按显示操作菜单
                                     viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
                                 },
@@ -273,9 +380,7 @@ fun FileListScreen(
                                     viewModel.handleIntent(FileListIntent.HideFileMenu)
                                 },
                                 onDownload = {
-                                    viewModel.handleIntent(
-                                        FileListIntent.DownloadFile(file.path, file.name)
-                                    )
+                                    checkPermissionAndDownload(file.path, file.name)
                                     viewModel.handleIntent(FileListIntent.HideFileMenu)
                                 },
                                 onDelete = {
@@ -409,6 +514,13 @@ fun FileListScreen(
                         viewModel.handleIntent(FileListIntent.HideCreateFolderDialog)
                         folderName = ""
                     },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.CreateNewFolder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
                     title = { Text("新建文件夹") },
                     text = {
                         TextField(
@@ -427,7 +539,7 @@ fun FileListScreen(
                                 }
                             }
                         ) {
-                            Text("创建")
+                            Text("创建", color = MaterialTheme.colorScheme.primary)
                         }
                     },
                     dismissButton = {
@@ -437,7 +549,7 @@ fun FileListScreen(
                                 folderName = ""
                             }
                         ) {
-                            Text("取消")
+                            Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 )
@@ -452,6 +564,13 @@ fun FileListScreen(
                     onDismissRequest = {
                         viewModel.handleIntent(FileListIntent.HideRenameDialog)
                         renameName = ""
+                    },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     },
                     title = { Text("重命名") },
                     text = {
@@ -473,7 +592,7 @@ fun FileListScreen(
                                 }
                             }
                         ) {
-                            Text("确定")
+                            Text("确定", color = MaterialTheme.colorScheme.primary)
                         }
                     },
                     dismissButton = {
@@ -483,11 +602,64 @@ fun FileListScreen(
                                 renameName = ""
                             }
                         ) {
-                            Text("取消")
+                            Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 )
             }
+        }
+        
+        // 权限说明对话框
+        if (showPermissionRationale) {
+            PermissionRationaleDialog(
+                permissionType = permissionType,
+                onConfirm = {
+                    showPermissionRationale = false
+                    permissionManager?.requestStoragePermission(
+                        onGranted = {
+                            // 权限授予后执行待处理的操作
+                            pendingDownloadFile?.let { (path, name) ->
+                                viewModel.handleIntent(FileListIntent.DownloadFile(path, name))
+                                pendingDownloadFile = null
+                            }
+                            pendingUploadFile?.let { file ->
+                                viewModel.handleIntent(FileListIntent.UploadFile(file))
+                                pendingUploadFile = null
+                            }
+                        },
+                        onDenied = {
+                            // 用户拒绝了权限
+                            pendingDownloadFile = null
+                            pendingUploadFile = null
+                        },
+                        onPermanentlyDenied = {
+                            // 用户永久拒绝了权限
+                            showPermissionDenied = true
+                            pendingDownloadFile = null
+                            pendingUploadFile = null
+                        }
+                    )
+                },
+                onDismiss = {
+                    showPermissionRationale = false
+                    pendingDownloadFile = null
+                    pendingUploadFile = null
+                }
+            )
+        }
+        
+        // 权限永久拒绝对话框
+        if (showPermissionDenied) {
+            PermissionPermanentlyDeniedDialog(
+                permissionType = permissionType,
+                onOpenSettings = {
+                    showPermissionDenied = false
+                    permissionManager?.openAppSettings()
+                },
+                onDismiss = {
+                    showPermissionDenied = false
+                }
+            )
         }
     }
 }

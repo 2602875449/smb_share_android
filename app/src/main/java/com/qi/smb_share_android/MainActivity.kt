@@ -3,6 +3,7 @@ package com.qi.smb_share_android
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,10 @@ import com.qi.smb_share_android.ui.download.DownloadHistoryScreen
 import com.qi.smb_share_android.ui.download.DownloadHistoryViewModel
 import com.qi.smb_share_android.ui.filelist.FileListScreen
 import com.qi.smb_share_android.ui.filelist.FileListViewModel
+import com.qi.smb_share_android.ui.settings.AboutScreen
+import com.qi.smb_share_android.ui.settings.PrivacyPolicyScreen
+import com.qi.smb_share_android.ui.settings.SettingsScreen
+import com.qi.smb_share_android.ui.settings.SettingsViewModel
 import com.qi.smb_share_android.ui.theme.SmbShareAndroidTheme
 import com.qi.smb_share_android.util.ApkInstaller
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +38,11 @@ import java.io.File
 private const val TAG = "MainActivity"
 
 enum class NavigationTab {
-    CONNECTION, FILE, DOWNLOAD_HISTORY
+    CONNECTION, FILE, DOWNLOAD_HISTORY, SETTINGS
+}
+
+enum class SettingsDestination {
+    MAIN, PRIVACY_POLICY, ABOUT
 }
 
 class MainActivity : ComponentActivity() {
@@ -42,7 +51,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            SmbShareAndroidTheme {
+            // 读取主题设置
+            val dataStoreManager = remember { DataStoreManager(this) }
+            val themeMode by dataStoreManager.getThemeMode().collectAsStateWithLifecycle(initialValue = com.qi.smb_share_android.data.model.ThemeMode.SYSTEM)
+            
+            // 根据主题模式决定是否使用深色主题
+            val darkTheme = when (themeMode) {
+                com.qi.smb_share_android.data.model.ThemeMode.LIGHT -> false
+                com.qi.smb_share_android.data.model.ThemeMode.DARK -> true
+                com.qi.smb_share_android.data.model.ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+            
+            SmbShareAndroidTheme(darkTheme = darkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -66,8 +86,10 @@ fun AppContent(onInstallApk: (File) -> Unit) {
     var showEditScreen by remember { mutableStateOf(false) }
     var initialPath by remember { mutableStateOf("") }
     var isRestoringLastAccess by remember { mutableStateOf(true) }
+    var settingsDestination by remember { mutableStateOf(SettingsDestination.MAIN) }
     val connectionViewModel: ConnectionViewModel = viewModel()
     val downloadHistoryViewModel: DownloadHistoryViewModel = viewModel()
+    val settingsViewModel: SettingsViewModel = viewModel()
     val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.activity.ComponentActivity
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -101,6 +123,21 @@ fun AppContent(onInstallApk: (File) -> Unit) {
         }
     }
 
+    // 处理设置页面的系统返回键
+    if (selectedTab == NavigationTab.SETTINGS) {
+        // 从设置二级页面返回到设置主页
+        BackHandler(enabled = settingsDestination != SettingsDestination.MAIN) {
+            settingsDestination = SettingsDestination.MAIN
+        }
+        
+        // 从设置主页返回到连接管理标签
+        if (settingsDestination == SettingsDestination.MAIN) {
+            BackHandler {
+                selectedTab = NavigationTab.CONNECTION
+            }
+        }
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar(
@@ -115,7 +152,7 @@ fun AppContent(onInstallApk: (File) -> Unit) {
                     )
             ) {
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Settings, contentDescription = "连接管理") },
+                    icon = { Icon(Icons.Default.Cloud, contentDescription = "连接管理") },
                     label = { Text("连接管理") },
                     selected = selectedTab == NavigationTab.CONNECTION,
                     onClick = { selectedTab = NavigationTab.CONNECTION },
@@ -152,6 +189,22 @@ fun AppContent(onInstallApk: (File) -> Unit) {
                     label = { Text("下载历史") },
                     selected = selectedTab == NavigationTab.DOWNLOAD_HISTORY,
                     onClick = { selectedTab = NavigationTab.DOWNLOAD_HISTORY },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "设置") },
+                    label = { Text("设置") },
+                    selected = selectedTab == NavigationTab.SETTINGS,
+                    onClick = { 
+                        selectedTab = NavigationTab.SETTINGS
+                        settingsDestination = SettingsDestination.MAIN
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -274,6 +327,39 @@ fun AppContent(onInstallApk: (File) -> Unit) {
                         viewModel = downloadHistoryViewModel,
                         onInstallApk = onInstallApk
                     )
+                }
+                selectedTab == NavigationTab.SETTINGS -> {
+                    // 显示设置相关界面
+                    when (settingsDestination) {
+                        SettingsDestination.MAIN -> {
+                            SettingsScreen(
+                                viewModel = settingsViewModel,
+                                onNavigateToPrivacyPolicy = {
+                                    settingsDestination = SettingsDestination.PRIVACY_POLICY
+                                },
+                                onNavigateToAbout = {
+                                    settingsDestination = SettingsDestination.ABOUT
+                                }
+                            )
+                        }
+                        SettingsDestination.PRIVACY_POLICY -> {
+                            PrivacyPolicyScreen(
+                                onBack = {
+                                    settingsDestination = SettingsDestination.MAIN
+                                }
+                            )
+                        }
+                        SettingsDestination.ABOUT -> {
+                            AboutScreen(
+                                onBack = {
+                                    settingsDestination = SettingsDestination.MAIN
+                                },
+                                onNavigateToPrivacyPolicy = {
+                                    settingsDestination = SettingsDestination.PRIVACY_POLICY
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }

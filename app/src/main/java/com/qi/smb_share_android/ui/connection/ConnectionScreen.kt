@@ -204,6 +204,13 @@ fun ConnectionScreen(
         configToDelete?.let { config ->
             AlertDialog(
                 onDismissRequest = { configToDelete = null },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
                 title = { Text("确认删除") },
                 text = {
                     Text("确定要删除连接配置 \"${config.name.ifEmpty { "未命名配置" }}\" 吗？")
@@ -215,14 +222,14 @@ fun ConnectionScreen(
                             configToDelete = null
                         }
                     ) {
-                        Text("删除")
+                        Text("删除", color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = { configToDelete = null }
                     ) {
-                        Text("取消")
+                        Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             )

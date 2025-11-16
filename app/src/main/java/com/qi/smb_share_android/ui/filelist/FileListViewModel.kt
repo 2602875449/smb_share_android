@@ -15,6 +15,7 @@ import com.qi.smb_share_android.domain.usecase.DownloadFileUseCase
 import com.qi.smb_share_android.domain.usecase.ListFilesUseCase
 import com.qi.smb_share_android.domain.usecase.RenameFileUseCase
 import com.qi.smb_share_android.domain.usecase.UploadFileUseCase
+import com.qi.smb_share_android.util.ErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -154,9 +155,14 @@ class FileListViewModel(
                     dataStoreManager.saveLastAccess(config.id, _state.value.currentPath)
                 }
                 .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "连接失败: ${e.message}"
+                    }
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        error = "连接失败: ${e.message}"
+                        error = errorMessage
                     )
                 }
         }
@@ -176,9 +182,14 @@ class FileListViewModel(
                     )
                 }
                 .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "加载文件列表失败: ${e.message}"
+                    }
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        error = "加载文件列表失败: ${e.message}"
+                        error = errorMessage
                     )
                 }
         }
@@ -256,9 +267,14 @@ class FileListViewModel(
                     )
                 }
                 .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "下载失败: ${e.message}"
+                    }
                     _state.value = _state.value.copy(
                         isDownloading = false,
-                        error = "下载失败: ${e.message}"
+                        error = errorMessage
                     )
                 }
         }
@@ -280,9 +296,14 @@ class FileListViewModel(
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "上传失败: ${e.message}"
+                    }
                     _state.value = _state.value.copy(
                         isUploading = false,
-                        error = "上传失败: ${e.message}"
+                        error = errorMessage
                     )
                 }
         }
@@ -302,9 +323,14 @@ class FileListViewModel(
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "创建文件夹失败: ${e.message}"
+                    }
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        error = "创建文件夹失败: ${e.message}"
+                        error = errorMessage
                     )
                 }
         }
@@ -321,9 +347,14 @@ class FileListViewModel(
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "删除失败: ${e.message}"
+                    }
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        error = "删除失败: ${e.message}"
+                        error = errorMessage
                     )
                 }
         }
@@ -340,9 +371,14 @@ class FileListViewModel(
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "重命名失败: ${e.message}"
+                    }
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        error = "重命名失败: ${e.message}"
+                        error = errorMessage
                     )
                 }
         }
