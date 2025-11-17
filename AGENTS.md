@@ -6,7 +6,7 @@
 
 - 保持代码风格统一、可维护。
 - 确保浅色 / 深色主题下的视觉一致性。
-- 避免破坏现有核心功能（SMB 连接、文件列表、下载历史等）。
+- 避免破坏现有核心功能（SMB 连接、文件列表、传输管理等）。
 
 ---
 
@@ -15,6 +15,7 @@
 - 使用 Kotlin 官方推荐代码风格：4 空格缩进、驼峰命名、不可变优先。
 - 新增业务逻辑优先放在 ViewModel / data 层，而不是直接写在 Composable 中。
 - 核心逻辑需有简短中文注释，说明“为什么这样做”，而不是只描述“做了什么”。
+- 使用中文响应回复
 
 ---
 
@@ -52,7 +53,7 @@
 - 对应的业务逻辑放在 `XXXViewModel` 中，并通过 `StateFlow` / `UiState` 暴露状态。
 - Composable 获取状态时优先使用 `collectAsStateWithLifecycle()` 等具备生命周期感知的 API。
 - 工具类、通用逻辑放在 `util` / `data` 等专用包中，避免业务逻辑散落在 UI 包里。
-- 文件名与类名保持一致，使用大驼峰命名，例如：`DownloadHistoryViewModel.kt`。
+- 文件名与类名保持一致，使用大驼峰命名，例如：`TransferManagerViewModel.kt`。
 
 ---
 

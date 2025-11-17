@@ -7,8 +7,6 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.qi.smb_share_android.data.model.DownloadItem
-import com.qi.smb_share_android.data.model.DownloadStatus
 import com.qi.smb_share_android.data.model.SMBConfig
 import com.qi.smb_share_android.data.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
@@ -18,13 +16,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "smb_configs")
-private val Context.downloadHistoryDataStore: DataStore<Preferences> by preferencesDataStore(name = "download_history")
 private val Context.lastAccessDataStore: DataStore<Preferences> by preferencesDataStore(name = "last_access")
 private val Context.appSettingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "app_settings")
 
 class DataStoreManager(private val context: Context) {
     private val configsKey = stringPreferencesKey("saved_configs")
-    private val downloadHistoryKey = stringPreferencesKey("download_history")
     private val lastConfigIdKey = stringPreferencesKey("last_config_id")
     private val lastPathKey = stringPreferencesKey("last_path")
     
@@ -116,71 +112,6 @@ class DataStoreManager(private val context: Context) {
             )
         }
         return configs
-    }
-    
-    /**
-     * 获取所有下载历史记录
-     */
-    val downloadHistory: Flow<List<DownloadItem>> = context.downloadHistoryDataStore.data.map { preferences ->
-        val historyJson = preferences[downloadHistoryKey] ?: "[]"
-        try {
-            parseDownloadHistoryFromJson(historyJson)
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-    
-    /**
-     * 保存下载历史记录列表
-     */
-    suspend fun saveDownloadHistory(history: List<DownloadItem>) {
-        context.downloadHistoryDataStore.edit { preferences ->
-            val jsonString = downloadHistoryToJson(history)
-            preferences[downloadHistoryKey] = jsonString
-        }
-    }
-    
-    private fun downloadHistoryToJson(history: List<DownloadItem>): String {
-        val jsonArray = JSONArray()
-        history.forEach { item ->
-            val jsonObject = JSONObject().apply {
-                put("id", item.id)
-                put("fileName", item.fileName)
-                put("remotePath", item.remotePath)
-                put("localPath", item.localPath)
-                put("status", item.status.name)
-                put("progress", item.progress)
-                put("totalBytes", item.totalBytes)
-                put("downloadedBytes", item.downloadedBytes)
-                put("errorMessage", item.errorMessage)
-                put("timestamp", item.timestamp)
-            }
-            jsonArray.put(jsonObject)
-        }
-        return jsonArray.toString()
-    }
-    
-    private fun parseDownloadHistoryFromJson(jsonString: String): List<DownloadItem> {
-        val jsonArray = JSONArray(jsonString)
-        val history = mutableListOf<DownloadItem>()
-        for (i in 0 until jsonArray.length()) {
-            val jsonObject = jsonArray.getJSONObject(i)
-            history.add(
-                DownloadItem(
-                    id = jsonObject.getString("id"),
-                    fileName = jsonObject.getString("fileName"),
-                    remotePath = jsonObject.getString("remotePath"),
-                    localPath = jsonObject.getString("localPath"),
-                    status = DownloadStatus.valueOf(jsonObject.getString("status")),
-                    progress = jsonObject.optInt("progress", 0),
-                    totalBytes = jsonObject.optLong("totalBytes", 0),
-                    downloadedBytes = jsonObject.optLong("downloadedBytes", 0),
-                    errorMessage = jsonObject.optString("errorMessage", null),
-                    timestamp = jsonObject.optLong("timestamp", System.currentTimeMillis())
-                )
-            )
-        }
-        return history
     }
     
     /**

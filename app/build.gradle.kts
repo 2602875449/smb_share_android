@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.plugin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -54,6 +55,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.activity)
     implementation(libs.androidx.material.icons.extended)
+    implementation("androidx.compose.foundation:foundation")
     
     // Lifecycle
     implementation(libs.lifecycle.viewmodel.compose)
@@ -71,6 +73,11 @@ dependencies {
     
     // SMB
     implementation(libs.smbj)
+    
+    // Room
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
     
     // Testing
     testImplementation(libs.junit)

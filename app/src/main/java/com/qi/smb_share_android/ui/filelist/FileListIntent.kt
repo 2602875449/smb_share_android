@@ -8,7 +8,7 @@ sealed class FileListIntent {
     object GoBack : FileListIntent()
     data class DownloadFile(val filePath: String, val fileName: String) : FileListIntent()
     object ClearError : FileListIntent()
-    object ClearDownload : FileListIntent()
+    object ClearMessage : FileListIntent()
     data class UpdateSearchQuery(val query: String) : FileListIntent()
     object ToggleSearch : FileListIntent()
     data class UploadFile(val file: File) : FileListIntent()

@@ -3,6 +3,7 @@ package com.qi.smb_share_android.data.repository
 import android.util.Log
 import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.msfscc.FileAttributes
+import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.smbj.share.File
 import com.qi.smb_share_android.data.local.SMBConnectionManager
@@ -159,6 +160,37 @@ class SMBFileRepository(private val connectionManager: SMBConnectionManager) {
     }
 
     /**
+     * 获取文件大小
+     */
+    @Throws(IOException::class)
+    fun getFileSize(filePath: String): Long {
+        Log.d(TAG, "开始获取文件大小: $filePath")
+        val diskShare = connectionManager.getDiskShare()
+        if (diskShare == null) {
+            Log.e(TAG, "获取文件大小失败: 未连接到SMB服务器")
+            throw IOException("未连接到SMB服务器")
+        }
+
+        try {
+            val normalizedPath = normalizePath(filePath)
+            Log.d(TAG, "规范化路径: $normalizedPath")
+            
+            // 获取文件信息
+            val fileInfo = diskShare.getFileInformation(normalizedPath)
+            val fileSize = fileInfo.standardInformation.endOfFile
+            
+            Log.d(TAG, "文件大小获取成功: $fileSize 字节")
+            return fileSize
+        } catch (e: Exception) {
+            Log.e(TAG, "获取文件大小失败", e)
+            Log.e(TAG, "文件路径: $filePath")
+            Log.e(TAG, "错误类型: ${e.javaClass.simpleName}")
+            Log.e(TAG, "错误消息: ${e.message}")
+            throw IOException("获取文件大小失败: ${e.message}", e)
+        }
+    }
+
+    /**
      * 规范化路径（统一使用反斜杠）
      */
     private fun normalizePath(path: String): String {
@@ -209,7 +241,7 @@ class SMBFileRepository(private val connectionManager: SMBConnectionManager) {
                 setOf(AccessMask.GENERIC_WRITE, AccessMask.GENERIC_READ),
                 null,
                 setOf(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
-                null,
+                SMB2CreateDisposition.FILE_OVERWRITE_IF,
                 null
             )
             

@@ -29,7 +29,7 @@
     <color name="accent_foreground">#28261B</color>
     
     <!-- 破坏性操作颜色 -->
-    <color name="destructive">#141413</color>
+    <color name="destructive">#EF4444</color>
     <color name="destructive_foreground">#FFFFFF</color>
     
     <!-- 边框和输入框颜色 -->

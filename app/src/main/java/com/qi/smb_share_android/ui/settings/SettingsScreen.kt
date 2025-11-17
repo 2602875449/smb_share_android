@@ -1,5 +1,6 @@
 package com.qi.smb_share_android.ui.settings
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,6 +11,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qi.smb_share_android.data.model.ThemeMode
@@ -32,16 +37,34 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showThemeDialog by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val downloadPathText = if (state.downloadDirectory.isNotBlank()) {
+        state.downloadDirectory
+    } else {
+        "路径检测中..."
+    }
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("设置") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
+            Surface(
+                color = Color.Transparent,
+                tonalElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "设置",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         LazyColumn(
@@ -65,6 +88,20 @@ fun SettingsScreen(
                         ThemeMode.DARK -> "深色"
                     },
                     onClick = { showThemeDialog = true }
+                )
+            }
+
+            item {
+                SettingsItem(
+                    icon = Icons.Default.Folder,
+                    title = "默认下载位置",
+                    subtitle = downloadPathText,
+                    onClick = {
+                        if (state.downloadDirectory.isNotBlank()) {
+                            clipboardManager.setText(AnnotatedString(state.downloadDirectory))
+                            Toast.makeText(context, "路径已复制", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 )
             }
             
@@ -117,14 +154,6 @@ fun SettingsScreen(
                 )
             }
             
-            item {
-                SettingsItem(
-                    icon = Icons.Default.DeleteSweep,
-                    title = "清除下载历史",
-                    subtitle = "删除所有下载记录",
-                    onClick = { viewModel.showClearHistoryDialog() }
-                )
-            }
         }
     }
     
@@ -144,6 +173,7 @@ fun SettingsScreen(
     if (state.showClearCacheDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.hideClearCacheDialog() },
+            containerColor = MaterialTheme.colorScheme.surface,
             icon = {
                 Icon(
                     imageVector = Icons.Default.CleaningServices,
@@ -152,7 +182,7 @@ fun SettingsScreen(
                 )
             },
             title = { Text("清除缓存") },
-            text = { Text("确定要清除所有缓存数据吗？这不会影响您的连接配置和下载历史。") },
+            text = { Text("确定要清除所有缓存数据吗？这不会影响您的连接配置。") },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearCache() }) {
                     Text("清除", color = MaterialTheme.colorScheme.primary)
@@ -166,31 +196,6 @@ fun SettingsScreen(
         )
     }
     
-    // 清除下载历史确认对话框
-    if (state.showClearHistoryDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.hideClearHistoryDialog() },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.DeleteSweep,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
-            },
-            title = { Text("清除下载历史") },
-            text = { Text("确定要删除所有下载记录吗？这不会删除已下载的文件。") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.clearDownloadHistory() }) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.hideClearHistoryDialog() }) {
-                    Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        )
-    }
 }
 
 /**
@@ -273,6 +278,7 @@ private fun ThemeSelectionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
         icon = {
             Icon(
                 imageVector = Icons.Default.Palette,

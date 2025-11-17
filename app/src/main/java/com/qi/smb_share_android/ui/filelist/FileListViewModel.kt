@@ -3,19 +3,20 @@ package com.qi.smb_share_android.ui.filelist
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.os.Environment
 import com.qi.smb_share_android.data.local.DataStoreManager
 import com.qi.smb_share_android.data.local.SMBConnectionManager
 import com.qi.smb_share_android.data.model.SMBConfig
-import com.qi.smb_share_android.data.repository.DownloadRepository
 import com.qi.smb_share_android.data.repository.SMBFileRepository
+import com.qi.smb_share_android.data.repository.TransferRepository
 import com.qi.smb_share_android.domain.usecase.ConnectSMBUseCase
 import com.qi.smb_share_android.domain.usecase.CreateFolderUseCase
 import com.qi.smb_share_android.domain.usecase.DeleteFileUseCase
-import com.qi.smb_share_android.domain.usecase.DownloadFileUseCase
 import com.qi.smb_share_android.domain.usecase.ListFilesUseCase
 import com.qi.smb_share_android.domain.usecase.RenameFileUseCase
 import com.qi.smb_share_android.domain.usecase.UploadFileUseCase
 import com.qi.smb_share_android.util.ErrorHandler
+import com.qi.smb_share_android.util.StorageHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,11 +32,10 @@ class FileListViewModel(
 ) : AndroidViewModel(application) {
     private val connectionManager = SMBConnectionManager()
     private val fileRepository = SMBFileRepository(connectionManager)
-    private val downloadRepository = DownloadRepository(application)
+    private val transferRepository = TransferRepository(application)
     private val dataStoreManager = DataStoreManager(application)
     private val connectUseCase = ConnectSMBUseCase(connectionManager)
     private val listFilesUseCase = ListFilesUseCase(fileRepository)
-    private val downloadFileUseCase = DownloadFileUseCase(fileRepository, downloadRepository)
     private val uploadFileUseCase = UploadFileUseCase(fileRepository)
     private val createFolderUseCase = CreateFolderUseCase(fileRepository)
     private val deleteFileUseCase = DeleteFileUseCase(fileRepository)
@@ -43,25 +43,6 @@ class FileListViewModel(
 
     private val _state = MutableStateFlow(FileListState(currentPath = initialPath))
     val state: StateFlow<FileListState> = _state.asStateFlow()
-
-    // 监听下载状态
-    init {
-        viewModelScope.launch {
-            downloadRepository.currentDownload.collect { downloadItem ->
-                _state.value = _state.value.copy(
-                    downloadItem = downloadItem,
-                    isDownloading = downloadItem?.status == com.qi.smb_share_android.data.model.DownloadStatus.DOWNLOADING
-                )
-                if (downloadItem?.status == com.qi.smb_share_android.data.model.DownloadStatus.COMPLETED) {
-                    downloadItem.localPath.let { path ->
-                        _state.value = _state.value.copy(
-                            downloadedFile = File(path)
-                        )
-                    }
-                }
-            }
-        }
-    }
 
     init {
         // 连接并加载文件
@@ -85,12 +66,8 @@ class FileListViewModel(
             is FileListIntent.ClearError -> {
                 _state.value = _state.value.copy(error = null)
             }
-            is FileListIntent.ClearDownload -> {
-                downloadRepository.clearDownload()
-                _state.value = _state.value.copy(
-                    downloadItem = null,
-                    downloadedFile = null
-                )
+            is FileListIntent.ClearMessage -> {
+                _state.value = _state.value.copy(message = null)
             }
             is FileListIntent.UpdateSearchQuery -> {
                 _state.value = _state.value.copy(searchQuery = intent.query)
@@ -165,6 +142,19 @@ class FileListViewModel(
                         error = errorMessage
                     )
                 }
+        }
+    }
+    
+    /**
+     * 确保连接有效，如果断开则重新连接
+     */
+    private suspend fun ensureConnected(): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            if (!connectionManager.isConnected()) {
+                connectUseCase.execute(config)
+            } else {
+                Result.success(Unit)
+            }
         }
     }
 
@@ -250,68 +240,131 @@ class FileListViewModel(
 
     private fun downloadFile(filePath: String, fileName: String) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isDownloading = true, error = null)
-            // 在IO线程执行网络操作
-            withContext(Dispatchers.IO) {
-                downloadFileUseCase.execute(
-                    filePath = filePath,
-                    fileName = fileName
-                ) { progress, downloaded, total ->
-                    // 进度更新由Flow自动处理
-                }
-            }
-                .onSuccess { file ->
-                    _state.value = _state.value.copy(
-                        isDownloading = false,
-                        downloadedFile = file
-                    )
-                }
-                .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "下载失败: ${e.message}"
+            try {
+                // 确保连接有效
+                ensureConnected()
+                    .onFailure { e ->
+                        val errorMessage = if (e is Exception) {
+                            ErrorHandler.getErrorMessageFromException(e)
+                        } else {
+                            "重新连接失败: ${e.message}"
+                        }
+                        _state.value = _state.value.copy(error = errorMessage)
+                        return@launch
                     }
-                    _state.value = _state.value.copy(
-                        isDownloading = false,
-                        error = errorMessage
+                
+                // 获取文件大小
+                val fileSize = withContext(Dispatchers.IO) {
+                    fileRepository.getFileSize(filePath)
+                }
+                
+                // 使用 StorageHelper 获取下载目录并构建本地保存路径
+                // 注意：实际文件创建会在 TransferService 中使用 StorageHelper 处理 Android 10+ 兼容性
+                val downloadDir = StorageHelper.getDownloadDirectory(getApplication())
+                val localPath = File(downloadDir, fileName).absolutePath
+                
+                // 调用 TransferRepository 开始下载
+                withContext(Dispatchers.IO) {
+                    transferRepository.startDownload(
+                        fileName = fileName,
+                        remotePath = filePath,
+                        localPath = localPath,
+                        fileSize = fileSize,
+                        config = config
                     )
                 }
+                
+                // 下载任务已创建，显示统一提示
+                _state.value = _state.value.copy(
+                    error = null,
+                    message = "下载已开始"
+                )
+            } catch (e: Exception) {
+                val errorMessage = ErrorHandler.getErrorMessageFromException(e)
+                _state.value = _state.value.copy(error = errorMessage)
+            }
         }
     }
 
     private fun uploadFile(localFile: File) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isUploading = true, error = null)
-            withContext(Dispatchers.IO) {
-                uploadFileUseCase.execute(
-                    localFile = localFile,
-                    remotePath = _state.value.currentPath
-                ) { uploaded, total ->
-                    // 进度更新可以在这里处理
-                }
-            }
-                .onSuccess {
-                    _state.value = _state.value.copy(isUploading = false)
-                    loadFiles() // 刷新文件列表
-                }
-                .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "上传失败: ${e.message}"
+            try {
+                _state.value = _state.value.copy(isUploading = true, error = null)
+                
+                // 确保连接有效
+                ensureConnected()
+                    .onFailure { e ->
+                        val errorMessage = if (e is Exception) {
+                            ErrorHandler.getErrorMessageFromException(e)
+                        } else {
+                            "重新连接失败: ${e.message}"
+                        }
+                        _state.value = _state.value.copy(
+                            isUploading = false,
+                            error = errorMessage
+                        )
+                        return@launch
                     }
-                    _state.value = _state.value.copy(
-                        isUploading = false,
-                        error = errorMessage
+                
+                // 获取文件大小
+                val fileSize = localFile.length()
+                
+                // 构建远程路径
+                val remotePath = if (_state.value.currentPath.isEmpty()) {
+                    localFile.name
+                } else {
+                    "${_state.value.currentPath}\\${localFile.name}"
+                }
+                
+                // 调用 TransferRepository 开始上传
+                withContext(Dispatchers.IO) {
+                    transferRepository.startUpload(
+                        fileName = localFile.name,
+                        localPath = localFile.absolutePath,
+                        remotePath = remotePath,
+                        fileSize = fileSize,
+                        config = config
                     )
                 }
+                
+                // 上传任务已创建，显示统一提示
+                _state.value = _state.value.copy(
+                    isUploading = false,
+                    error = null,
+                    message = "上传已开始"
+                )
+                
+                // 刷新文件列表（稍后会显示上传的文件）
+                loadFiles()
+            } catch (e: Exception) {
+                val errorMessage = ErrorHandler.getErrorMessageFromException(e)
+                _state.value = _state.value.copy(
+                    isUploading = false,
+                    error = errorMessage
+                )
+            }
         }
     }
     
     private fun createFolder(folderName: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null, showCreateFolderDialog = false)
+            
+            // 确保连接有效
+            ensureConnected()
+                .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "重新连接失败: ${e.message}"
+                    }
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        error = errorMessage
+                    )
+                    return@launch
+                }
+            
             withContext(Dispatchers.IO) {
                 createFolderUseCase.execute(
                     folderName = folderName,
@@ -339,6 +392,22 @@ class FileListViewModel(
     private fun deleteFile(filePath: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null, fileMenuPath = null)
+            
+            // 确保连接有效
+            ensureConnected()
+                .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "重新连接失败: ${e.message}"
+                    }
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        error = errorMessage
+                    )
+                    return@launch
+                }
+            
             withContext(Dispatchers.IO) {
                 deleteFileUseCase.execute(filePath)
             }
@@ -363,6 +432,22 @@ class FileListViewModel(
     private fun renameFile(filePath: String, newName: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null, showRenameDialog = false)
+            
+            // 确保连接有效
+            ensureConnected()
+                .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "重新连接失败: ${e.message}"
+                    }
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        error = errorMessage
+                    )
+                    return@launch
+                }
+            
             withContext(Dispatchers.IO) {
                 renameFileUseCase.execute(filePath, newName)
             }

@@ -233,6 +233,7 @@ fun ConnectionScreen(
         configToDelete?.let { config ->
             AlertDialog(
                 onDismissRequest = { configToDelete = null },
+                containerColor = MaterialTheme.colorScheme.surface,
                 icon = {
                     Icon(
                         imageVector = Icons.Default.Delete,
@@ -318,5 +319,4 @@ private fun SavedConfigItem(
         }
     }
 }
-
 

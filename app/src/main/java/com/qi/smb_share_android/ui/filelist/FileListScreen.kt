@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,9 +45,11 @@ import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -94,6 +95,7 @@ fun FileListScreen(
     val activity = context as? ComponentActivity
     val focusManager = LocalFocusManager.current
     val searchFocusRequester = remember { FocusRequester() }
+    val snackbarHostState = remember { SnackbarHostState() }
     
     // 权限相关状态
     var showPermissionRationale by remember { mutableStateOf(false) }
@@ -179,16 +181,45 @@ fun FileListScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         result.data?.data?.let { uri ->
-            val inputStream = context.contentResolver.openInputStream(uri)
-            val fileName = uri.lastPathSegment ?: "uploaded_file"
-            val tempFile = File(context.cacheDir, fileName)
-            inputStream?.use { input ->
-                tempFile.outputStream().use { output ->
-                    input.copyTo(output)
+            try {
+                // 获取真实文件名
+                val fileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0 && cursor.moveToFirst()) {
+                        cursor.getString(nameIndex)
+                    } else {
+                        null
+                    }
+                } ?: "uploaded_file_${System.currentTimeMillis()}"
+                
+                // 创建临时文件并复制内容
+                val tempFile = File(context.cacheDir, fileName)
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
                 }
+                
+                // 验证文件是否成功创建且有内容
+                if (tempFile.exists() && tempFile.length() > 0) {
+                    // 使用权限检查函数
+                    checkPermissionAndUpload(tempFile)
+                }
+            } catch (e: Exception) {
+                // 异常会在 ViewModel 层处理
+                e.printStackTrace()
             }
-            // 使用权限检查函数
-            checkPermissionAndUpload(tempFile)
+        }
+    }
+
+    // 监听 message 变化，显示 Snackbar 提示
+    LaunchedEffect(state.message) {
+        state.message?.let { message ->
+            if (message.contains("下载已开始") || message.contains("上传已开始")) {
+                snackbarHostState.showSnackbar(message)
+                // 清除 message，避免重复显示
+                viewModel.handleIntent(FileListIntent.ClearMessage)
+            }
         }
     }
 
@@ -204,6 +235,9 @@ fun FileListScreen(
     }
 
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+        },
         topBar = {
             Surface(
                 color = Color.Transparent,
@@ -257,13 +291,13 @@ fun FileListScreen(
             }
         },
         floatingActionButton = {
-            // FAB菜单
-            if (showFabMenu) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    // 上传文件按钮（放在上方）
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                // FAB菜单项 - 只在展开时显示
+                if (showFabMenu) {
+                    // 上传文件按钮
                     FloatingActionButton(
                         onClick = {
                             val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
@@ -275,15 +309,9 @@ fun FileListScreen(
                         },
                         modifier = Modifier.size(56.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(Icons.Default.Upload, contentDescription = "上传文件")
-                            Text("上传", style = MaterialTheme.typography.labelSmall)
-                        }
+                        Icon(Icons.Default.Upload, contentDescription = "上传文件")
                     }
-                    // 新建文件夹按钮（放在下方，更靠近主FAB）
+                    // 新建文件夹按钮
                     FloatingActionButton(
                         onClick = {
                             viewModel.handleIntent(FileListIntent.ShowCreateFolderDialog)
@@ -291,24 +319,18 @@ fun FileListScreen(
                         },
                         modifier = Modifier.size(56.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(Icons.Default.CreateNewFolder, contentDescription = "新建文件夹")
-                            Text("新建", style = MaterialTheme.typography.labelSmall)
-                        }
+                        Icon(Icons.Default.CreateNewFolder, contentDescription = "新建文件夹")
                     }
                 }
-            }
-            // 主FAB按钮
-            FloatingActionButton(
-                onClick = { showFabMenu = !showFabMenu }
-            ) {
-                Icon(
-                    if (showFabMenu) Icons.Default.Close else Icons.Default.Add,
-                    contentDescription = if (showFabMenu) "关闭菜单" else "打开菜单"
-                )
+                // 主FAB按钮 - 始终显示
+                FloatingActionButton(
+                    onClick = { showFabMenu = !showFabMenu }
+                ) {
+                    Icon(
+                        if (showFabMenu) Icons.Default.Close else Icons.Default.Add,
+                        contentDescription = if (showFabMenu) "关闭菜单" else "打开菜单"
+                    )
+                }
             }
         },
         floatingActionButtonPosition = FabPosition.End
@@ -476,81 +498,7 @@ fun FileListScreen(
                 }
             }
 
-            // 下载进度
-            state.downloadItem?.let { downloadItem ->
-                if (downloadItem.status == com.qi.smb_share_android.data.model.DownloadStatus.DOWNLOADING) {
-                    Card(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(16.dp)
-                            .fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "正在下载: ${downloadItem.fileName}",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            if (downloadItem.progress >= 0) {
-                                LinearProgressIndicator(
-                                    progress = { downloadItem.progress / 100f },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Text(
-                                    text = "${downloadItem.progress}% - ${
-                                        FileTypeHelper.formatFileSize(downloadItem.downloadedBytes)
-                                    } / ${FileTypeHelper.formatFileSize(downloadItem.totalBytes)}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            } else {
-                                Text(
-                                    text = "已下载: ${FileTypeHelper.formatFileSize(downloadItem.downloadedBytes)}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 下载完成提示
-            state.downloadedFile?.let { file ->
-                Card(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp)
-                        .fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "下载完成: ${file.name}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        if (FileTypeHelper.isApkFile(file.name)) {
-                            Button(
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = {
-                                    onInstallApk(file)
-                                    viewModel.handleIntent(FileListIntent.ClearDownload)
-                                }
-                            ) {
-                                Text("安装APK")
-                            }
-                        }
-                        TextButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { viewModel.handleIntent(FileListIntent.ClearDownload) }
-                        ) {
-                            Text("关闭")
-                        }
-                    }
-                }
-            }
+            // 成功消息提示已改为使用 Snackbar 显示，不再使用 Card
 
             // 创建文件夹对话框
             if (state.showCreateFolderDialog) {
@@ -559,6 +507,7 @@ fun FileListScreen(
                         viewModel.handleIntent(FileListIntent.HideCreateFolderDialog)
                         folderName = ""
                     },
+                    containerColor = MaterialTheme.colorScheme.surface,
                     icon = {
                         Icon(
                             imageVector = Icons.Default.CreateNewFolder,
@@ -572,7 +521,15 @@ fun FileListScreen(
                             value = folderName,
                             onValueChange = { folderName = it },
                             placeholder = { Text("请输入文件夹名称") },
-                            singleLine = true
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent
+                            )
                         )
                     },
                     confirmButton = {
@@ -610,6 +567,7 @@ fun FileListScreen(
                         viewModel.handleIntent(FileListIntent.HideRenameDialog)
                         renameName = ""
                     },
+                    containerColor = MaterialTheme.colorScheme.surface,
                     icon = {
                         Icon(
                             imageVector = Icons.Default.Edit,
@@ -623,7 +581,15 @@ fun FileListScreen(
                             value = renameName,
                             onValueChange = { renameName = it },
                             placeholder = { Text("请输入新名称") },
-                            singleLine = true
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent
+                            )
                         )
                     },
                     confirmButton = {
@@ -762,7 +728,7 @@ private fun FileItemRow(
                 Text(
                     text = file.name,
                     style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (!file.isDirectory) {
@@ -774,7 +740,7 @@ private fun FileItemRow(
                 }
                 file.lastModified?.let { date ->
                     Text(
-                        text = date.toString(),
+                        text = FileTypeHelper.formatDate(date),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -788,10 +754,15 @@ private fun FileItemRow(
 
                     DropdownMenu(
                         expanded = showMenu,
-                        onDismissRequest = onMenuDismiss
+                        onDismissRequest = onMenuDismiss,
+                        containerColor = MaterialTheme.colorScheme.surface
                     ) {
                         DropdownMenuItem(
                             text = { Text("下载") },
+                            colors = MenuDefaults.itemColors(
+                                textColor = MaterialTheme.colorScheme.onSurface,
+                                leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             onClick = {
                                 onDownload()
                                 onMenuDismiss()
@@ -802,6 +773,10 @@ private fun FileItemRow(
                         )
                         DropdownMenuItem(
                             text = { Text("重命名") },
+                            colors = MenuDefaults.itemColors(
+                                textColor = MaterialTheme.colorScheme.onSurface,
+                                leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             onClick = {
                                 onRename()
                                 onMenuDismiss()
@@ -812,6 +787,10 @@ private fun FileItemRow(
                         )
                         DropdownMenuItem(
                             text = { Text("删除") },
+                            colors = MenuDefaults.itemColors(
+                                textColor = MaterialTheme.colorScheme.error,
+                                leadingIconColor = MaterialTheme.colorScheme.error
+                            ),
                             onClick = {
                                 onDelete()
                                 onMenuDismiss()

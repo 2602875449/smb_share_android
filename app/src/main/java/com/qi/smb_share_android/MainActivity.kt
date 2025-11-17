@@ -22,8 +22,6 @@ import com.qi.smb_share_android.data.model.SMBConfig
 import com.qi.smb_share_android.ui.connection.ConnectionScreen
 import com.qi.smb_share_android.ui.connection.ConnectionViewModel
 import com.qi.smb_share_android.ui.connection.EditConnectionScreen
-import com.qi.smb_share_android.ui.download.DownloadHistoryScreen
-import com.qi.smb_share_android.ui.download.DownloadHistoryViewModel
 import com.qi.smb_share_android.ui.filelist.FileListScreen
 import com.qi.smb_share_android.ui.filelist.FileListViewModel
 import com.qi.smb_share_android.ui.settings.AboutScreen
@@ -31,15 +29,25 @@ import com.qi.smb_share_android.ui.settings.PrivacyPolicyScreen
 import com.qi.smb_share_android.ui.settings.SettingsScreen
 import com.qi.smb_share_android.ui.settings.SettingsViewModel
 import com.qi.smb_share_android.ui.theme.SmbShareAndroidTheme
+import com.qi.smb_share_android.ui.transfer.TransferManagerScreen
+import com.qi.smb_share_android.ui.transfer.TransferManagerViewModel
 import com.qi.smb_share_android.util.ApkInstaller
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.sp
 
 private const val TAG = "MainActivity"
 
 enum class NavigationTab {
-    CONNECTION, FILE, DOWNLOAD_HISTORY, SETTINGS
+    CONNECTION, FILE, TRANSFER_MANAGER, SETTINGS
 }
 
 enum class SettingsDestination {
@@ -90,10 +98,14 @@ fun AppContent(onInstallApk: (File) -> Unit) {
     var isRestoringLastAccess by remember { mutableStateOf(true) }
     var settingsDestination by remember { mutableStateOf(SettingsDestination.MAIN) }
     val connectionViewModel: ConnectionViewModel = viewModel()
-    val downloadHistoryViewModel: DownloadHistoryViewModel = viewModel()
+    val transferManagerViewModel: TransferManagerViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
     val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
     val context = androidx.compose.ui.platform.LocalContext.current
+    
+    // 监听活动任务数量
+    val transferState by transferManagerViewModel.state.collectAsStateWithLifecycle()
+    val activeTransferCount = transferState.activeTransferCount
 
     // 监听连接配置列表加载
     val connectionState by connectionViewModel.state.collectAsStateWithLifecycle()
@@ -187,10 +199,16 @@ fun AppContent(onInstallApk: (File) -> Unit) {
                     )
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.History, contentDescription = "下载历史") },
-                    label = { Text("下载历史") },
-                    selected = selectedTab == NavigationTab.DOWNLOAD_HISTORY,
-                    onClick = { selectedTab = NavigationTab.DOWNLOAD_HISTORY },
+                    icon = { 
+                        BadgedIcon(
+                            icon = Icons.Default.SwapVert,
+                            badgeCount = activeTransferCount,
+                            hasActiveTransfers = activeTransferCount > 0
+                        )
+                    },
+                    label = { Text("传输管理") },
+                    selected = selectedTab == NavigationTab.TRANSFER_MANAGER,
+                    onClick = { selectedTab = NavigationTab.TRANSFER_MANAGER },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -323,10 +341,10 @@ fun AppContent(onInstallApk: (File) -> Unit) {
                         }
                     }
                 }
-                selectedTab == NavigationTab.DOWNLOAD_HISTORY -> {
-                    // 显示下载历史界面
-                    DownloadHistoryScreen(
-                        viewModel = downloadHistoryViewModel,
+                selectedTab == NavigationTab.TRANSFER_MANAGER -> {
+                    // 显示传输管理界面
+                    TransferManagerScreen(
+                        viewModel = transferManagerViewModel,
                         onInstallApk = onInstallApk
                     )
                 }
@@ -381,5 +399,103 @@ class FileListViewModelFactory(
         Log.e(TAG, "创建ViewModel失败: 未知的ViewModel类 ${modelClass.simpleName}")
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.simpleName}")
     }
+}
+
+/**
+ * 带徽章和动画的图标组件
+ * 支持徽章数量变化动画和活动任务时的脉冲动画
+ */
+@Composable
+fun BadgedIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    badgeCount: Int,
+    hasActiveTransfers: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier) {
+        // 脉冲动画 - 当有活动任务时
+        val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+        val pulseScale by infiniteTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.15f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulseScale"
+        )
+        
+        // 应用脉冲动画（仅在有活动任务时）
+        val scale = if (hasActiveTransfers) pulseScale else 1f
+        
+        Icon(
+            imageVector = icon,
+            contentDescription = "传输管理",
+            modifier = Modifier.graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+        )
+        
+        // 徽章 - 显示活动任务数量
+        if (badgeCount > 0) {
+            // 徽章数量变化动画
+            val animatedBadgeCount by animateIntAsState(
+                targetValue = badgeCount,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                ),
+                label = "badgeCount"
+            )
+            
+            // 徽章缩放动画
+            val badgeScale by animateFloatAsState(
+                targetValue = if (badgeCount > 0) 1f else 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                ),
+                label = "badgeScale"
+            )
+            
+            Box(
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.TopEnd)
+                    .offset(x = 8.dp, y = (-4).dp)
+                    .size(18.dp)
+                    .graphicsLayer {
+                        scaleX = badgeScale
+                        scaleY = badgeScale
+                    }
+                    .background(
+                        color = MaterialTheme.colorScheme.error,
+                        shape = CircleShape
+                    ),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Text(
+                    text = if (animatedBadgeCount > 99) "99+" else animatedBadgeCount.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onError,
+                    fontSize = 10.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun animateIntAsState(
+    targetValue: Int,
+    animationSpec: AnimationSpec<Float>,
+    label: String
+): State<Int> {
+    val animatedFloat by animateFloatAsState(
+        targetValue = targetValue.toFloat(),
+        animationSpec = animationSpec,
+        label = label
+    )
+    return remember { derivedStateOf { animatedFloat.toInt() } }
 }
 

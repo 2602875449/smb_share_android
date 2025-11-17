@@ -6,7 +6,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
@@ -22,22 +24,32 @@ fun PrivacyPolicyScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("隐私政策") },
-                navigationIcon = {
+            Surface(
+                color = Color.Transparent,
+                tonalElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
+                            contentDescription = "返回",
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
+                    Text(
+                        text = "隐私政策",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         LazyColumn(
@@ -75,7 +87,7 @@ fun PrivacyPolicyScreen(
                     title = "2. 本地存储的数据",
                     content = listOf(
                         "SMB 服务器连接配置（包括服务器地址、端口、共享名称、用户名和密码）",
-                        "文件下载历史记录（包括文件名、下载时间和本地路径）",
+                        "文件传输任务记录（包括文件名、远程路径、本地保存路径以及进度信息）",
                         "应用设置（如主题偏好、引导完成状态等）",
                         "最后访问的服务器和路径信息"
                     ),
@@ -116,7 +128,7 @@ fun PrivacyPolicyScreen(
                     title = "5. 您的权利",
                     content = listOf(
                         "您可以随时在系统设置中撤销应用的权限",
-                        "您可以在应用设置中清除下载历史和缓存数据",
+                        "您可以在传输管理页面删除不再需要的传输记录，并在应用设置中清除缓存数据",
                         "您可以在系统设置中清除应用的所有数据",
                         "您可以随时卸载应用，所有本地数据将被删除"
                     )

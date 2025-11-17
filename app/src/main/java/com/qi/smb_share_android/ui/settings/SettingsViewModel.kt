@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qi.smb_share_android.data.local.DataStoreManager
 import com.qi.smb_share_android.data.model.ThemeMode
+import com.qi.smb_share_android.util.StorageHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +27,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     init {
         loadSettings()
         calculateCacheSize()
+        loadDownloadDirectory()
     }
     
     /**
@@ -64,20 +66,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
     
     /**
-     * 显示清除下载历史对话框
-     */
-    fun showClearHistoryDialog() {
-        _state.value = _state.value.copy(showClearHistoryDialog = true)
-    }
-    
-    /**
-     * 隐藏清除下载历史对话框
-     */
-    fun hideClearHistoryDialog() {
-        _state.value = _state.value.copy(showClearHistoryDialog = false)
-    }
-    
-    /**
      * 清除缓存
      */
     fun clearCache() {
@@ -99,22 +87,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
     
     /**
-     * 清除下载历史
-     */
-    fun clearDownloadHistory() {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                try {
-                    dataStoreManager.saveDownloadHistory(emptyList())
-                } catch (e: Exception) {
-                    // 忽略错误
-                }
-            }
-            _state.value = _state.value.copy(showClearHistoryDialog = false)
-        }
-    }
-    
-    /**
      * 计算缓存大小
      */
     fun calculateCacheSize() {
@@ -128,6 +100,22 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 }
             }
             _state.value = _state.value.copy(cacheSize = size)
+        }
+    }
+
+    /**
+     * 加载默认下载目录，明确展示文件实际保存位置
+     */
+    private fun loadDownloadDirectory() {
+        viewModelScope.launch {
+            val path = withContext(Dispatchers.IO) {
+                try {
+                    StorageHelper.getDisplayDownloadPath(getApplication())
+                } catch (e: Exception) {
+                    "未知"
+                }
+            }
+            _state.value = _state.value.copy(downloadDirectory = path)
         }
     }
     
@@ -182,6 +170,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 data class SettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val showClearCacheDialog: Boolean = false,
-    val showClearHistoryDialog: Boolean = false,
-    val cacheSize: String = "计算中..."
+    val cacheSize: String = "计算中...",
+    val downloadDirectory: String = ""
 )
