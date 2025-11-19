@@ -1,0 +1,155 @@
+<resources>
+    <string name="app_name">NetFold: SMB Manager</string>
+    
+    <!-- Connection Screen -->
+    <string name="title_connection_config">SMB连接配置</string>
+    <string name="action_new_connection">新建连接</string>
+    <string name="section_saved_connections">已保存的连接</string>
+    <string name="empty_state_title">暂无保存的连接</string>
+    <string name="empty_state_subtitle">点击右下角按钮新建连接</string>
+    <string name="press_again_to_exit">再按一次退出应用</string>
+    <string name="unnamed_config">未命名配置</string>
+    <string name="label_anonymous">匿名登录</string>
+    
+    <!-- Edit Connection Screen -->
+    <string name="title_edit_connection">编辑连接配置</string>
+    <string name="title_new_connection">新建连接配置</string>
+    <string name="label_config_name">配置名称（可选）</string>
+    <string name="label_server_address">服务器地址 *</string>
+    <string name="label_port">端口</string>
+    <string name="label_share_name">共享名称 *</string>
+    <string name="label_username">用户名</string>
+    <string name="label_password">密码</string>
+    <string name="btn_test_connection">测试连接</string>
+    <string name="btn_save_config">保存配置</string>
+    <string name="btn_connect">连接</string>
+    <string name="msg_test_success">连接测试成功</string>
+    <string name="msg_test_failed">连接测试失败: %1$s</string>
+    
+    <!-- File List Screen -->
+    <string name="title_file_list">文件列表</string>
+    <string name="label_path">路径：</string>
+    <string name="action_upload_file">上传文件</string>
+    <string name="action_new_folder">新建文件夹</string>
+    <string name="hint_search_file">搜索文件...</string>
+    <string name="empty_search_result">未找到匹配的文件</string>
+    <string name="empty_folder">文件夹为空</string>
+    <string name="action_download">下载</string>
+    <string name="action_rename">重命名</string>
+    <string name="action_delete">删除</string>
+    <string name="action_more_options">更多操作</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_confirm">确定</string>
+    <string name="action_create">创建</string>
+    <string name="hint_folder_name">请输入文件夹名称</string>
+    <string name="hint_new_name">请输入新名称</string>
+    <string name="desc_back_to_connection">返回连接配置</string>
+    <string name="desc_parent_directory">上级目录</string>
+    <string name="desc_refresh">刷新</string>
+    <string name="desc_clear">清除</string>
+    <string name="desc_close_menu">关闭菜单</string>
+    <string name="desc_open_menu">打开菜单</string>
+    
+    <!-- Dialogs -->
+    <string name="dialog_title_delete">确认删除</string>
+    <string name="dialog_message_delete">确定要删除 "%1$s" 吗？</string>
+    <string name="dialog_title_new_folder">新建文件夹</string>
+    <string name="dialog_title_rename">重命名</string>
+    <string name="dialog_title_permission">需要权限</string>
+    <string name="dialog_message_permission_storage">需要存储权限才能下载/上传文件。</string>
+    <string name="dialog_message_permission_denied">权限被永久拒绝，请在设置中开启。</string>
+    <string name="action_settings">设置</string>
+    <string name="action_edit">编辑</string>
+    <string name="action_close">关闭</string>
+    <string name="action_back">返回</string>
+    <string name="settings_language">语言</string>
+    <string name="language_follow_system">跟随系统</string>
+    <string name="language_english">English</string>
+    <string name="language_chinese">简体中文</string>
+    <string name="settings_download_path_checking">路径检测中...</string>
+    <string name="settings_section_general">通用</string>
+    <string name="settings_theme_title">主题</string>
+    <string name="settings_theme_follow_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_download_location_title">默认下载位置</string>
+    <string name="settings_download_path_copied">路径已复制</string>
+    <string name="settings_section_support">帮助与支持</string>
+    <string name="settings_onboarding_title">查看引导教程</string>
+    <string name="settings_onboarding_subtitle">重新查看应用使用说明</string>
+    <string name="settings_privacy_title">隐私政策</string>
+    <string name="settings_privacy_subtitle">了解我们如何保护您的隐私</string>
+    <string name="settings_about_title">关于应用</string>
+    <string name="settings_about_subtitle">版本信息和开发者信息</string>
+    <string name="settings_section_advanced">高级</string>
+    <string name="settings_clear_cache_title">清除缓存</string>
+    <string name="settings_clear_cache_subtitle">当前缓存: %1$s</string>
+    <string name="settings_theme_dialog_title">选择主题</string>
+    <string name="settings_clear_cache_dialog_title">清除缓存</string>
+    <string name="settings_clear_cache_dialog_message">确定要清除所有缓存数据吗？这不会影响您的连接配置。</string>
+    <string name="settings_clear_cache_confirm">清除</string>
+    <!-- Transfer Manager -->
+    <string name="transfer_snackbar_notification_unavailable">当前无法请求通知权限，请稍后重试</string>
+    <string name="transfer_snackbar_notification_enabled">已开启通知提醒</string>
+    <string name="transfer_snackbar_notification_denied">未授予通知权限，后台传输可能受限</string>
+    <string name="transfer_cd_exit_multi_select">退出多选模式</string>
+    <string name="transfer_app_bar_selected">已选择 %1$d 项</string>
+    <string name="transfer_app_bar_title">传输管理</string>
+    <string name="transfer_cd_select_all">全选</string>
+    <string name="transfer_cd_refresh">刷新</string>
+    <string name="transfer_cd_bulk_delete">批量删除</string>
+    <string name="transfer_cd_bulk_cancel">批量取消</string>
+    <string name="transfer_tab_downloading">下载中</string>
+    <string name="transfer_tab_uploading">上传中</string>
+    <string name="transfer_tab_completed">已完成</string>
+    <string name="transfer_empty_downloading">暂无下载任务</string>
+    <string name="transfer_empty_uploading">暂无上传任务</string>
+    <string name="transfer_empty_completed">暂无历史记录</string>
+    <string name="transfer_notification_banner_title">开启通知权限</string>
+    <string name="transfer_notification_banner_description_denied">通知权限被永久拒绝，应用无法在后台展示传输进度。\n请前往系统设置手动开启。</string>
+    <string name="transfer_notification_banner_description_rationale">为了确保前台传输服务正常运行，需要开启通知权限，以便实时展示任务状态。</string>
+    <string name="transfer_notification_banner_action_settings">前往设置</string>
+    <string name="transfer_notification_banner_action_allow">立即允许</string>
+    <string name="transfer_dialog_delete_batch_title">批量删除确认</string>
+    <string name="transfer_dialog_delete_single_title">删除确认</string>
+    <string name="transfer_dialog_delete_batch_message">确定要删除选中的 %1$d 个任务吗？</string>
+    <string name="transfer_dialog_delete_single_message">确定要删除此任务吗？</string>
+    <string name="transfer_dialog_delete_remove_file">同时删除本地文件</string>
+    
+    <!-- Bottom Navigation -->
+    <string name="nav_connection">连接管理</string>
+    <string name="nav_files">文件</string>
+    <string name="nav_transfer_manager">传输管理</string>
+    <string name="nav_settings">设置</string>
+    
+    <!-- Permission Dialogs -->
+    <string name="permission_title_storage_download">需要存储权限</string>
+    <string name="permission_message_storage_download">为了将文件下载到您的设备，应用需要访问存储空间的权限。\n\n您的文件将保存在 Download 文件夹中，您可以随时查看和管理这些文件。</string>
+    <string name="permission_title_storage_upload">需要存储权限</string>
+    <string name="permission_message_storage_upload">为了上传文件到 SMB 服务器，应用需要读取您设备上文件的权限。\n\n应用只会读取您选择的文件，不会访问其他文件。</string>
+    <string name="permission_title_notification">需要通知权限</string>
+    <string name="permission_message_notification">为了持续展示传输进度并保证传输服务稳定运行，应用需要发送通知。\n\n通知仅用于展示上传/下载状态和提示网络变化，不会推送广告。</string>
+    <string name="permission_button_allow">允许</string>
+    <string name="permission_button_deny">拒绝</string>
+    <string name="permission_title_denied">权限被拒绝</string>
+    <string name="permission_message_storage_download_denied">您已拒绝存储权限，无法下载文件。\n\n如需使用下载功能，请前往设置页面手动授予存储权限。</string>
+    <string name="permission_message_storage_upload_denied">您已拒绝存储权限，无法上传文件。\n\n如需使用上传功能，请前往设置页面手动授予存储权限。</string>
+    <string name="permission_message_notification_denied">您已拒绝通知权限，传输服务无法在后台持续运行。\n\n如需继续接收上传/下载进度和错误提醒，请前往设置页面手动开启通知。</string>
+    <string name="permission_button_go_to_settings">前往设置</string>
+    
+    <!-- Error Messages -->
+    <string name="error_action_retry">重试</string>
+    <string name="error_action_close">关闭</string>
+    
+    <!-- About Screen -->
+    <string name="about_title">关于</string>
+    <string name="about_app_name">NetFold: SMB Manager</string>
+    <string name="about_version">版本 %1$s (%2$s)</string>
+    <string name="about_description">一个简单易用的 SMB 文件共享客户端，帮助您轻松访问和管理网络共享文件。</string>
+    <string name="desc_back">返回</string>
+    <string name="desc_app_icon">应用图标</string>
+    
+    <!-- Main Activity -->
+    <string name="msg_please_connect_server">请先连接服务器</string>
+    <string name="action_go_to_connection">前往连接管理</string>
+</resources>

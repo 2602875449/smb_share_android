@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.qi.smb_share_android"
+    namespace = "com.qi.smbshare"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.qi.smb_share_android"
+        applicationId = "com.qi.smbshare"
         minSdk = 28
         targetSdk = 36
         versionCode = 1
@@ -19,13 +19,36 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        val sharedKeystore = file("keystore/smb_share.jks")
+        fun com.android.build.api.dsl.SigningConfig.applySmbShareKey() {
+            // 调试与发布统一使用同一份签名，便于快速验证线上行为
+            storeFile = sharedKeystore
+            storePassword = "smb123456"
+            keyAlias = "key0"
+            keyPassword = "smb123456"
+        }
+
+        create("release") {
+            applySmbShareKey()
+        }
+        getByName("debug") {
+            applySmbShareKey()
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -39,6 +62,18 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+    packaging {
+        resources {
+            // 避免 AndroidTest 合并资源时因重复 LICENSE 文件冲突
+            excludes += "/META-INF/LICENSE.md"
+            excludes += "/META-INF/LICENSE-notice.md"
+        }
     }
 }
 
@@ -81,10 +116,18 @@ dependencies {
     
     // Testing
     testImplementation(libs.junit)
+    testImplementation(libs.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation(libs.mockk.android)
+    androidTestImplementation(libs.androidx.test.core.ktx)
+    
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

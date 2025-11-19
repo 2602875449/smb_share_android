@@ -1,4 +1,4 @@
-# AGENTS 规则（smb_share_android）
+# AGENTS 规则（NetFold: SMB Manager）
 
 > 本文档约定本仓库中人类开发者和 AI 助手（“Agent”）协作时需要遵守的规则。
 

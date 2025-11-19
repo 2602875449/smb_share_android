@@ -1,6 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- 基础 Activity 主题，Compose 内部重新定义配色 -->
-    <style name="Theme.Smb_share_android" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Smbshare" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
 </resources>
