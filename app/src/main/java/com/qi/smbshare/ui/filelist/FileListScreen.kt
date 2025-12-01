@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FabPosition
@@ -389,6 +391,14 @@ fun FileListScreen(
                     }
                 }
 
+                // 操作进度提示 - 轻量级顶部进度条
+                if (state.isOperating) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 // 文件列表内容
                 if (state.isLoading) {
                     Box(
@@ -441,7 +451,7 @@ fun FileListScreen(
                                 onLongClick = {
                                     // 清除搜索框焦点
                                     focusManager.clearFocus()
-                                    // 长按显示操作菜单
+                                    // 长按显示操作菜单（文件和目录都支持）
                                     viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
                                 },
                                 showMenu = state.fileMenuPath == file.path,
@@ -691,13 +701,9 @@ private fun FileItemRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .then(
-                if (!file.isDirectory) {
-                    Modifier.clickable(onClick = onLongClick, onClickLabel = stringResource(R.string.action_download))
-                } else {
-                    Modifier
-                }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
             ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -748,17 +754,19 @@ private fun FileItemRow(
                     )
                 }
             }
-            if (!file.isDirectory) {
-                Box {
-                    IconButton(onClick = onLongClick) {
-                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.action_more_options))
-                    }
+            // 文件和目录都显示操作菜单按钮
+            Box {
+                IconButton(onClick = onLongClick) {
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.action_more_options))
+                }
 
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = onMenuDismiss,
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ) {
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = onMenuDismiss,
+                    containerColor = MaterialTheme.colorScheme.surface
+                ) {
+                    // 只有文件才显示下载选项
+                    if (!file.isDirectory) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.action_download)) },
                             colors = MenuDefaults.itemColors(
@@ -773,35 +781,37 @@ private fun FileItemRow(
                                 Icon(Icons.Default.Download, contentDescription = null)
                             }
                         )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_rename)) },
-                            colors = MenuDefaults.itemColors(
-                                textColor = MaterialTheme.colorScheme.onSurface,
-                                leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            onClick = {
-                                onRename()
-                                onMenuDismiss()
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Edit, contentDescription = null)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_delete)) },
-                            colors = MenuDefaults.itemColors(
-                                textColor = MaterialTheme.colorScheme.error,
-                                leadingIconColor = MaterialTheme.colorScheme.error
-                            ),
-                            onClick = {
-                                onDelete()
-                                onMenuDismiss()
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Delete, contentDescription = null)
-                            }
-                        )
                     }
+                    // 重命名选项（文件和目录都支持）
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_rename)) },
+                        colors = MenuDefaults.itemColors(
+                            textColor = MaterialTheme.colorScheme.onSurface,
+                            leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        onClick = {
+                            onRename()
+                            onMenuDismiss()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Edit, contentDescription = null)
+                        }
+                    )
+                    // 删除选项（文件和目录都支持）
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_delete)) },
+                        colors = MenuDefaults.itemColors(
+                            textColor = MaterialTheme.colorScheme.error,
+                            leadingIconColor = MaterialTheme.colorScheme.error
+                        ),
+                        onClick = {
+                            onDelete()
+                            onMenuDismiss()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Delete, contentDescription = null)
+                        }
+                    )
                 }
             }
         }

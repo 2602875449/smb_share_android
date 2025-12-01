@@ -347,7 +347,7 @@ class FileListViewModel(
     
     private fun createFolder(folderName: String) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, error = null, showCreateFolderDialog = false)
+            _state.value = _state.value.copy(isOperating = true, error = null, showCreateFolderDialog = false)
             
             // 确保连接有效
             ensureConnected()
@@ -358,7 +358,7 @@ class FileListViewModel(
                         "重新连接失败: ${e.message}"
                     }
                     _state.value = _state.value.copy(
-                        isLoading = false,
+                        isOperating = false,
                         error = errorMessage
                     )
                     return@launch
@@ -371,7 +371,7 @@ class FileListViewModel(
                 )
             }
                 .onSuccess {
-                    _state.value = _state.value.copy(isLoading = false)
+                    _state.value = _state.value.copy(isOperating = false)
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
@@ -381,7 +381,7 @@ class FileListViewModel(
                         "创建文件夹失败: ${e.message}"
                     }
                     _state.value = _state.value.copy(
-                        isLoading = false,
+                        isOperating = false,
                         error = errorMessage
                     )
                 }
@@ -390,7 +390,7 @@ class FileListViewModel(
     
     private fun deleteFile(filePath: String) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, error = null, fileMenuPath = null)
+            _state.value = _state.value.copy(isOperating = true, error = null, fileMenuPath = null)
             
             // 确保连接有效
             ensureConnected()
@@ -401,7 +401,7 @@ class FileListViewModel(
                         "重新连接失败: ${e.message}"
                     }
                     _state.value = _state.value.copy(
-                        isLoading = false,
+                        isOperating = false,
                         error = errorMessage
                     )
                     return@launch
@@ -411,7 +411,7 @@ class FileListViewModel(
                 deleteFileUseCase.execute(filePath)
             }
                 .onSuccess {
-                    _state.value = _state.value.copy(isLoading = false)
+                    _state.value = _state.value.copy(isOperating = false)
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
@@ -421,7 +421,7 @@ class FileListViewModel(
                         "删除失败: ${e.message}"
                     }
                     _state.value = _state.value.copy(
-                        isLoading = false,
+                        isOperating = false,
                         error = errorMessage
                     )
                 }
@@ -430,7 +430,7 @@ class FileListViewModel(
     
     private fun renameFile(filePath: String, newName: String) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, error = null, showRenameDialog = false)
+            _state.value = _state.value.copy(isOperating = true, error = null, showRenameDialog = false)
             
             // 确保连接有效
             ensureConnected()
@@ -441,7 +441,7 @@ class FileListViewModel(
                         "重新连接失败: ${e.message}"
                     }
                     _state.value = _state.value.copy(
-                        isLoading = false,
+                        isOperating = false,
                         error = errorMessage
                     )
                     return@launch
@@ -451,7 +451,7 @@ class FileListViewModel(
                 renameFileUseCase.execute(filePath, newName)
             }
                 .onSuccess {
-                    _state.value = _state.value.copy(isLoading = false)
+                    _state.value = _state.value.copy(isOperating = false)
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
@@ -461,7 +461,7 @@ class FileListViewModel(
                         "重命名失败: ${e.message}"
                     }
                     _state.value = _state.value.copy(
-                        isLoading = false,
+                        isOperating = false,
                         error = errorMessage
                     )
                 }

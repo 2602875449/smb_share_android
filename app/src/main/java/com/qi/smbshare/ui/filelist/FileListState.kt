@@ -6,7 +6,8 @@ data class FileListState(
     val files: List<FileItem> = emptyList(),
     val currentPath: String = "",
     val pathHistory: List<String> = emptyList(),
-    val isLoading: Boolean = false,
+    val isLoading: Boolean = false, // 用于列表加载
+    val isOperating: Boolean = false, // 用于单次操作（创建/删除/重命名）
     val isUploading: Boolean = false,
     val error: String? = null,
     val message: String? = null, // 成功消息提示
