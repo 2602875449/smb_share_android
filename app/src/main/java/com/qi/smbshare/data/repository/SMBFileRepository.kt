@@ -112,7 +112,11 @@ class SMBFileRepository(private val connectionManager: SMBConnectionManager) {
             }
 
             directory.close()
-            val sortedFiles = fileItems.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+            // 排序规则：文件夹优先，然后按修改时间倒序（新的在前）
+            val sortedFiles = fileItems.sortedWith(
+                compareBy<FileItem> { !it.isDirectory } // 文件夹在前
+                    .thenByDescending { it.lastModified ?: Date(0) } // 修改时间倒序，null 视为最早
+            )
             Log.d(TAG, "列出文件成功，共 ${sortedFiles.size} 个文件/文件夹")
             return sortedFiles
         } catch (e: Exception) {

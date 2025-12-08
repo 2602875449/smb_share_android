@@ -735,9 +735,8 @@ private fun FileItemRow(
             ) {
                 Text(
                     text = file.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    style = MaterialTheme.typography.bodyLarge
+                    // 移除 maxLines 限制，让长文件名完整显示并自动换行
                 )
                 if (!file.isDirectory) {
                     Text(
