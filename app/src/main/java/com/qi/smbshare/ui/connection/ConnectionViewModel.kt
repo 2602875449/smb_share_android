@@ -12,6 +12,7 @@ import com.qi.smbshare.domain.usecase.DeleteConnectionUseCase
 import com.qi.smbshare.domain.usecase.SaveConnectionUseCase
 import com.qi.smbshare.util.ErrorHandler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     private val connectUseCase = ConnectSMBUseCase(connectionManager)
     private val saveConnectionUseCase = SaveConnectionUseCase(connectionRepository)
     private val deleteConnectionUseCase = DeleteConnectionUseCase(connectionRepository)
+    private var loadConnectionsJob: Job? = null
 
     private val _state = MutableStateFlow(ConnectionState())
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -85,7 +87,10 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun loadConnections() {
-        viewModelScope.launch {
+        if (loadConnectionsJob != null) {
+            return
+        }
+        loadConnectionsJob = viewModelScope.launch {
             connectionRepository.getSavedConfigs()
                 .catch { e ->
                     val errorMessage = if (e is Exception) {
@@ -112,7 +117,6 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                         isAnonymous = false,
                         navigateToEdit = null // 保存成功后清除导航状态
                     )
-                    loadConnections()
                 }
                 .onFailure { e ->
                     val errorMessage = if (e is Exception) {
@@ -134,7 +138,6 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             deleteConnectionUseCase.execute(configId)
                 .onSuccess {
                     _state.value = _state.value.copy(isLoading = false)
-                    loadConnections()
                 }
                 .onFailure { e ->
                     val errorMessage = if (e is Exception) {
@@ -161,9 +164,6 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             // 先保存配置
             saveConnectionUseCase.execute(config)
                 .onSuccess {
-                    // 保存成功后，重新加载配置列表
-                    loadConnections()
-                    
                     // 然后执行连接
                     withContext(Dispatchers.IO) {
                         connectUseCase.execute(config)
@@ -282,4 +282,3 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         connectUseCase.disconnect()
     }
 }
-

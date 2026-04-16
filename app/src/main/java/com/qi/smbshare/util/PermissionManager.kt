@@ -37,8 +37,12 @@ class PermissionManager(
     /**
      * 检查存储权限状态
      */
-    fun checkStoragePermission(): PermissionStatus {
-        val permissions = getStoragePermissions()
+    fun checkDownloadPermission(): PermissionStatus {
+        val permissions = getDownloadPermissions()
+
+        if (permissions.isEmpty()) {
+            return PermissionStatus.GRANTED
+        }
         
         // 检查所有需要的权限是否都已授予
         val allGranted = permissions.all { permission ->
@@ -112,7 +116,7 @@ class PermissionManager(
      * @param onDenied 权限拒绝时的回调
      * @param onPermanentlyDenied 权限永久拒绝时的回调
      */
-    fun requestStoragePermission(
+    fun requestDownloadPermission(
         onGranted: () -> Unit,
         onDenied: () -> Unit,
         onPermanentlyDenied: () -> Unit
@@ -121,7 +125,11 @@ class PermissionManager(
         this.onDeniedCallback = onDenied
         this.onPermanentlyDeniedCallback = onPermanentlyDenied
         
-        val permissions = getStoragePermissions()
+        val permissions = getDownloadPermissions()
+        if (permissions.isEmpty()) {
+            onGranted()
+            return
+        }
         // 记录权限请求历史
         permissions.forEach { markPermissionAsRequested(it) }
         permissionLauncher.launch(permissions)
@@ -165,23 +173,12 @@ class PermissionManager(
      * 获取需要请求的存储权限列表
      * 根据 Android 版本返回不同的权限
      */
-    private fun getStoragePermissions(): Array<String> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ (API 33+) 使用细粒度存储权限
-            arrayOf(
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO
-            )
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11-12 (API 30-32)
-            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+    private fun getDownloadPermissions(): Array<String> {
+        return if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            // Android 9 及以下写公共下载目录仍需要传统外部存储权限
+            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         } else {
-            // Android 10 及以下 (API 29-)
-            arrayOf(
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            )
+            emptyArray()
         }
     }
     
@@ -221,13 +218,7 @@ class PermissionManager(
          * 在 Android 10+ (API 29+) 使用分区存储时，某些操作可能不需要权限
          */
         fun needsStoragePermission(context: Context): Boolean {
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Android 10+ 使用分区存储，但读取媒体文件仍需要权限
-                true
-            } else {
-                // Android 9 及以下需要存储权限
-                true
-            }
+            return Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
         }
 
         /**

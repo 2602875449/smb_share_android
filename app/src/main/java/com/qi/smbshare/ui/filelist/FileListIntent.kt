@@ -1,6 +1,6 @@
 package com.qi.smbshare.ui.filelist
 
-import java.io.File
+import android.net.Uri
 
 sealed class FileListIntent {
     object LoadFiles : FileListIntent()
@@ -11,7 +11,11 @@ sealed class FileListIntent {
     object ClearMessage : FileListIntent()
     data class UpdateSearchQuery(val query: String) : FileListIntent()
     object ToggleSearch : FileListIntent()
-    data class UploadFile(val file: File) : FileListIntent()
+    data class UploadFile(
+        val uri: Uri,
+        val displayName: String,
+        val size: Long
+    ) : FileListIntent()
     data class CreateFolder(val folderName: String) : FileListIntent()
     data class DeleteFile(val filePath: String) : FileListIntent()
     data class RenameFile(val filePath: String, val newName: String) : FileListIntent()
@@ -22,4 +26,3 @@ sealed class FileListIntent {
     data class ShowFileMenu(val filePath: String) : FileListIntent()
     object HideFileMenu : FileListIntent()
 }
-

@@ -49,6 +49,10 @@ android {
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.getByName("release")
+            // 生成原生调试符号文件，用于 Google Play 崩溃分析
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
     }
     compileOptions {

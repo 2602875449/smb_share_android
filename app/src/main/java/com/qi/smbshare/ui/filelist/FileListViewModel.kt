@@ -78,7 +78,11 @@ class FileListViewModel(
                 )
             }
             is FileListIntent.UploadFile -> {
-                uploadFile(intent.file)
+                uploadFile(
+                    fileUri = intent.uri,
+                    displayName = intent.displayName,
+                    size = intent.size
+                )
             }
             is FileListIntent.CreateFolder -> {
                 createFolder(intent.folderName)
@@ -285,7 +289,7 @@ class FileListViewModel(
         }
     }
 
-    private fun uploadFile(localFile: File) {
+    private fun uploadFile(fileUri: android.net.Uri, displayName: String, size: Long) {
         viewModelScope.launch {
             try {
                 _state.value = _state.value.copy(isUploading = true, error = null)
@@ -305,23 +309,20 @@ class FileListViewModel(
                         return@launch
                     }
                 
-                // 获取文件大小
-                val fileSize = localFile.length()
-                
                 // 构建远程路径
                 val remotePath = if (_state.value.currentPath.isEmpty()) {
-                    localFile.name
+                    displayName
                 } else {
-                    "${_state.value.currentPath}\\${localFile.name}"
+                    "${_state.value.currentPath}\\$displayName"
                 }
                 
                 // 调用 TransferRepository 开始上传
                 withContext(Dispatchers.IO) {
                     transferRepository.startUpload(
-                        fileName = localFile.name,
-                        localPath = localFile.absolutePath,
+                        fileName = displayName,
+                        localPath = fileUri.toString(),
                         remotePath = remotePath,
-                        fileSize = fileSize,
+                        fileSize = size.coerceAtLeast(0L),
                         config = config
                     )
                 }
@@ -333,8 +334,6 @@ class FileListViewModel(
                     message = "上传已开始"
                 )
                 
-                // 刷新文件列表（稍后会显示上传的文件）
-                loadFiles()
             } catch (e: Exception) {
                 val errorMessage = ErrorHandler.getErrorMessageFromException(e)
                 _state.value = _state.value.copy(
@@ -473,4 +472,3 @@ class FileListViewModel(
         connectUseCase.disconnect()
     }
 }
-

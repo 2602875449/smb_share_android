@@ -106,7 +106,6 @@ fun FileListScreen(
     var showPermissionDenied by remember { mutableStateOf(false) }
     var permissionType by remember { mutableStateOf(PermissionType.STORAGE_DOWNLOAD) }
     var pendingDownloadFile by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var pendingUploadFile by remember { mutableStateOf<File?>(null) }
     
     // 权限管理器引用 - 用于在启动器回调中访问
     var permissionManagerRef by remember { mutableStateOf<PermissionManager?>(null) }
@@ -131,7 +130,7 @@ fun FileListScreen(
     // 权限检查和下载文件的辅助函数
     val checkPermissionAndDownload = { filePath: String, fileName: String ->
         permissionManager?.let { pm ->
-            when (pm.checkStoragePermission()) {
+            when (pm.checkDownloadPermission()) {
                 PermissionManager.PermissionStatus.GRANTED -> {
                     // 权限已授予，直接下载
                     viewModel.handleIntent(FileListIntent.DownloadFile(filePath, fileName))
@@ -154,63 +153,46 @@ fun FileListScreen(
         }
     }
     
-    // 权限检查和上传文件的辅助函数
-    val checkPermissionAndUpload = { file: File ->
-        permissionManager?.let { pm ->
-            when (pm.checkStoragePermission()) {
-                PermissionManager.PermissionStatus.GRANTED -> {
-                    // 权限已授予，直接上传
-                    viewModel.handleIntent(FileListIntent.UploadFile(file))
-                }
-                PermissionManager.PermissionStatus.DENIED -> {
-                    // 需要请求权限
-                    pendingUploadFile = file
-                    permissionType = PermissionType.STORAGE_UPLOAD
-                    showPermissionRationale = true
-                }
-                PermissionManager.PermissionStatus.PERMANENTLY_DENIED -> {
-                    // 权限被永久拒绝
-                    permissionType = PermissionType.STORAGE_UPLOAD
-                    showPermissionDenied = true
-                }
-            }
-        } ?: run {
-            // 如果无法获取权限管理器，直接尝试上传
-            viewModel.handleIntent(FileListIntent.UploadFile(file))
-        }
-    }
-    
     // 文件选择器
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         result.data?.data?.let { uri ->
             try {
-                // 获取真实文件名
-                val fileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+
+                // 直接使用系统返回的 URI，避免为上传先复制一份大文件到缓存目录
+                val (fileName, fileSize) = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                     val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (nameIndex >= 0 && cursor.moveToFirst()) {
-                        cursor.getString(nameIndex)
+                    val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (cursor.moveToFirst()) {
+                        val resolvedName = if (nameIndex >= 0) {
+                            cursor.getString(nameIndex)
+                        } else {
+                            null
+                        } ?: "uploaded_file_${System.currentTimeMillis()}"
+                        val resolvedSize = if (sizeIndex >= 0) {
+                            cursor.getLong(sizeIndex)
+                        } else {
+                            -1L
+                        }
+                        resolvedName to resolvedSize
                     } else {
                         null
                     }
-                } ?: "uploaded_file_${System.currentTimeMillis()}"
-                
-                // 创建临时文件并复制内容
-                val tempFile = File(context.cacheDir, fileName)
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    tempFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                
-                // 验证文件是否成功创建且有内容
-                if (tempFile.exists() && tempFile.length() > 0) {
-                    // 使用权限检查函数
-                    checkPermissionAndUpload(tempFile)
-                }
+                } ?: ("uploaded_file_${System.currentTimeMillis()}" to -1L)
+
+                viewModel.handleIntent(
+                    FileListIntent.UploadFile(
+                        uri = uri,
+                        displayName = fileName,
+                        size = fileSize
+                    )
+                )
             } catch (e: Exception) {
-                // 异常会在 ViewModel 层处理
                 e.printStackTrace()
             }
         }
@@ -256,7 +238,13 @@ fun FileListScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (state.canGoBack) {
+                            viewModel.handleIntent(FileListIntent.GoBack)
+                        } else {
+                            onBack()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.desc_back_to_connection))
                     }
                     Column(
@@ -304,9 +292,11 @@ fun FileListScreen(
                     // 上传文件按钮
                     FloatingActionButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                                 type = "*/*"
                                 addCategory(Intent.CATEGORY_OPENABLE)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
                             }
                             filePickerLauncher.launch(intent)
                             showFabMenu = false
@@ -637,35 +627,28 @@ fun FileListScreen(
                     permissionType = permissionType,
                     onConfirm = {
                         showPermissionRationale = false
-                        permissionManager?.requestStoragePermission(
+                        permissionManager?.requestDownloadPermission(
                             onGranted = {
                                 // 权限授予后执行待处理的操作
                                 pendingDownloadFile?.let { (path, name) ->
                                     viewModel.handleIntent(FileListIntent.DownloadFile(path, name))
                                     pendingDownloadFile = null
                                 }
-                                pendingUploadFile?.let { file ->
-                                    viewModel.handleIntent(FileListIntent.UploadFile(file))
-                                    pendingUploadFile = null
-                                }
                             },
                             onDenied = {
                                 // 用户拒绝了权限
                                 pendingDownloadFile = null
-                                pendingUploadFile = null
                             },
                             onPermanentlyDenied = {
                                 // 用户永久拒绝了权限
                                 showPermissionDenied = true
                                 pendingDownloadFile = null
-                                pendingUploadFile = null
                             }
                         )
                     },
                     onDismiss = {
                         showPermissionRationale = false
                         pendingDownloadFile = null
-                        pendingUploadFile = null
                     }
                 )
             }
@@ -816,4 +799,3 @@ private fun FileItemRow(
         }
     }
 }
-

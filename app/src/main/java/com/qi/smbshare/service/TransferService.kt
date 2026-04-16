@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -16,6 +17,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.hierynomus.msdtyp.AccessMask
+import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.smbj.share.DiskShare
 import com.qi.smbshare.MainActivity
@@ -29,15 +31,19 @@ import com.qi.smbshare.data.repository.TransferRepository
 import com.qi.smbshare.util.StorageHelper
 import com.qi.smbshare.util.toSMBConfigOrNull
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import java.io.File
 import java.io.FileInputStream
+import java.io.InputStream
+import kotlin.coroutines.coroutineContext
 import com.hierynomus.smbj.share.File as SMBFile
 
 /**
@@ -111,6 +117,9 @@ class TransferService : Service() {
     
     // 暂停标志映射
     private val pausedTasks = mutableSetOf<String>()
+
+    // 取消标志映射
+    private val cancelledTasks = mutableSetOf<String>()
     
     // 任务配置映射（存储每个任务的 SMBConfig）
     private val taskConfigs = mutableMapOf<String, SMBConfig>()
@@ -248,10 +257,11 @@ class TransferService : Service() {
             Log.w(TAG, "任务 $taskId 已在运行中")
             return
         }
-        
+
+        cancelledTasks.remove(taskId)
         // 存储配置以便恢复时使用
         taskConfigs[taskId] = config
-        
+
         val job = serviceScope.launch {
             try {
                 // 获取任务信息
@@ -263,19 +273,22 @@ class TransferService : Service() {
                 
                 // 等待获取传输槽位（最多 3 个并发）
                 transferSemaphore.acquire()
-                
+
                 try {
+                    ensureTaskNotCancelled(taskId)
                     // 更新状态为进行中
                     repository.updateTaskStatus(taskId, TransferStatus.ACTIVE)
-                    
+
                     // 执行传输（带重试机制）
                     executeTransferWithRetry(task, config)
-                    
+
                     // 传输完成
-                    if (!pausedTasks.contains(taskId)) {
+                    if (!pausedTasks.contains(taskId) && !cancelledTasks.contains(taskId)) {
                         repository.updateTaskStatus(taskId, TransferStatus.COMPLETED)
                         Log.d(TAG, "任务 $taskId 完成")
                     }
+                } catch (e: CancellationException) {
+                    Log.d(TAG, "任务 $taskId 已中断: ${e.message}")
                 } catch (e: TransferException) {
                     Log.e(TAG, "任务 $taskId 失败: ${e.message}", e)
                     val errorMessage = formatErrorMessage(e)
@@ -294,9 +307,10 @@ class TransferService : Service() {
                 } finally {
                     transferSemaphore.release()
                     activeTransferJobs.remove(taskId)
-                    pausedTasks.remove(taskId)
-                    // 任务完成后清理配置（但保留以便重试）
-                    // taskConfigs.remove(taskId)
+                    if (cancelledTasks.remove(taskId)) {
+                        pausedTasks.remove(taskId)
+                        taskConfigs.remove(taskId)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "启动任务 $taskId 时出错: ${e.message}", e)
@@ -311,11 +325,13 @@ class TransferService : Service() {
      * 根据错误类型自动重试
      */
     private suspend fun executeTransferWithRetry(task: TransferTask, config: SMBConfig) {
-        var lastException: TransferException? = null
         var networkRetryCount = 0
         var timeoutRetryCount = 0
-        
+
         while (true) {
+            waitWhilePaused(task.id)
+            ensureTaskNotCancelled(task.id)
+
             try {
                 // 执行传输
                 when (task.type) {
@@ -325,8 +341,6 @@ class TransferService : Service() {
                 // 成功完成，退出循环
                 return
             } catch (e: TransferException) {
-                lastException = e
-                
                 // 根据错误类型决定是否重试
                 val shouldRetry = when (e.errorType) {
                     TransferErrorType.NETWORK_ERROR -> {
@@ -357,21 +371,20 @@ class TransferService : Service() {
                         false
                     }
                 }
-                
+
                 if (!shouldRetry) {
                     throw e
                 }
-                
-                // 等待一段时间后重试
-                delay(RETRY_DELAY_MS)
-                
-                // 检查是否被暂停或取消
-                if (pausedTasks.contains(task.id)) {
-                    throw TransferException(
-                        TransferErrorType.UNKNOWN_ERROR,
-                        "任务已被暂停"
-                    )
+
+                var waited = 0L
+                while (waited < RETRY_DELAY_MS) {
+                    waitWhilePaused(task.id)
+                    ensureTaskNotCancelled(task.id)
+                    delay(200)
+                    waited += 200
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // 将未知异常转换为 TransferException
                 throw TransferException(
@@ -403,7 +416,7 @@ class TransferService : Service() {
     private fun pauseTransfer(taskId: String) {
         Log.d(TAG, "暂停任务: $taskId")
         pausedTasks.add(taskId)
-        
+
         serviceScope.launch {
             repository.updateTaskStatus(taskId, TransferStatus.PAUSED)
         }
@@ -415,7 +428,11 @@ class TransferService : Service() {
     private fun resumeTransfer(taskId: String) {
         Log.d(TAG, "恢复任务: $taskId")
         pausedTasks.remove(taskId)
-        
+
+        if (activeTransferJobs.containsKey(taskId)) {
+            return
+        }
+
         val cachedConfig = taskConfigs[taskId]
         if (cachedConfig != null) {
             startTransfer(taskId, cachedConfig)
@@ -442,19 +459,39 @@ class TransferService : Service() {
      */
     private fun cancelTransfer(taskId: String) {
         Log.d(TAG, "取消任务: $taskId")
-        
-        // 标记为暂停以停止传输循环
-        pausedTasks.add(taskId)
-        
+
+        cancelledTasks.add(taskId)
+        pausedTasks.remove(taskId)
+
         // 取消 Job
         activeTransferJobs[taskId]?.cancel()
         activeTransferJobs.remove(taskId)
-        
+
         // 清理配置
         taskConfigs.remove(taskId)
-        
+
         serviceScope.launch {
             repository.updateTaskStatus(taskId, TransferStatus.CANCELLED)
+        }
+    }
+
+    /**
+     * 暂停期间阻塞传输循环，直到用户恢复或任务被取消
+     */
+    private suspend fun waitWhilePaused(taskId: String) {
+        while (pausedTasks.contains(taskId)) {
+            ensureTaskNotCancelled(taskId)
+            coroutineContext.ensureActive()
+            delay(100)
+        }
+    }
+
+    /**
+     * 如果任务已取消，立即中断当前协程，避免错误地写成失败状态
+     */
+    private fun ensureTaskNotCancelled(taskId: String) {
+        if (cancelledTasks.contains(taskId)) {
+            throw CancellationException("任务已取消")
         }
     }
 
@@ -529,11 +566,9 @@ class TransferService : Service() {
                         
                         // 读取并写入数据
                         while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            // 检查是否暂停
-                            while (pausedTasks.contains(task.id)) {
-                                delay(100)
-                            }
-                            
+                            waitWhilePaused(task.id)
+                            ensureTaskNotCancelled(task.id)
+                            coroutineContext.ensureActive()
                             outputStream.write(buffer, 0, bytesRead)
                             totalBytesRead += bytesRead
                             
@@ -627,6 +662,8 @@ class TransferService : Service() {
             }
             
             Log.d(TAG, "下载完成: ${task.fileName}")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: TransferException) {
             // 直接抛出 TransferException
             throw e
@@ -652,10 +689,12 @@ class TransferService : Service() {
     }
     
     /**
-     * 规范化路径（移除开头的斜杠，确保路径格式正确）
+     * 规范化 SMB 路径，统一使用反斜杠并移除多余前缀。
      */
     private fun normalizePath(path: String): String {
-        return path.trimStart('/')
+        return path
+            .replace("/", "\\")
+            .trimStart('\\')
     }
     
     /**
@@ -665,34 +704,26 @@ class TransferService : Service() {
         Log.d(TAG, "开始上传: ${task.fileName}")
         
         val smbManager = SMBConnectionManager()
-        val diskShare: DiskShare? = null
+        var remoteFile: SMBFile? = null
         
         try {
             // 连接到 SMB 服务器
-            // diskShare = smbManager.connect(config)
-            
-            // 打开本地文件进行读取
-            val localFile = File(task.localPath)
-            if (!localFile.exists()) {
-                throw TransferException(
-                    TransferErrorType.FILE_ERROR,
-                    "本地文件不存在: ${task.localPath}"
-                )
-            }
-            
-            if (!localFile.canRead()) {
-                throw TransferException(
-                    TransferErrorType.FILE_ERROR,
-                    "无法读取本地文件: 权限不足"
-                )
-            }
-            
-            // 打开远程文件进行写入
-            // val remoteFile = diskShare.openFile(...)
-            
-            // 使用 FileInputStream 读取本地文件
+            val diskShare = smbManager.connect(config)
+            val normalizedPath = normalizePath(task.remotePath)
+            Log.d(TAG, "打开远程文件用于上传: $normalizedPath")
+            remoteFile = diskShare.openFile(
+                normalizedPath,
+                setOf(AccessMask.GENERIC_WRITE, AccessMask.GENERIC_READ),
+                null,
+                setOf(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
+                SMB2CreateDisposition.FILE_OVERWRITE_IF,
+                null
+            )
+
+            // 使用 URI/InputStream 直接上传，避免先复制到缓存目录造成额外 IO 和空间占用
             try {
-                FileInputStream(localFile).use { inputStream ->
+                openTaskInputStream(task).use { inputStream ->
+                    remoteFile.outputStream.use { outputStream ->
                     val buffer = ByteArray(BUFFER_SIZE)
                     var bytesRead: Int
                     var totalBytesRead = 0L
@@ -701,19 +732,26 @@ class TransferService : Service() {
                     
                     // 读取并写入数据
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        // 检查是否暂停
-                        while (pausedTasks.contains(task.id)) {
-                            delay(100)
-                        }
-                        
-                        // remoteOutputStream.write(buffer, 0, bytesRead)
+                        waitWhilePaused(task.id)
+                        ensureTaskNotCancelled(task.id)
+                        coroutineContext.ensureActive()
+
+                        outputStream.write(buffer, 0, bytesRead)
                         totalBytesRead += bytesRead
                         
                         // 每秒更新一次进度
                         val currentTime = System.currentTimeMillis()
                         if (currentTime - lastUpdateTime >= PROGRESS_UPDATE_INTERVAL) {
-                            val progress = ((totalBytesRead * 100) / task.fileSize).toInt()
-                            val speed = ((totalBytesRead - lastBytesRead) * 1000) / (currentTime - lastUpdateTime)
+                            val progress = if (task.fileSize > 0) {
+                                ((totalBytesRead * 100) / task.fileSize).toInt().coerceIn(0, 100)
+                            } else {
+                                0
+                            }
+                            val speed = if (currentTime > lastUpdateTime) {
+                                ((totalBytesRead - lastBytesRead) * 1000) / (currentTime - lastUpdateTime)
+                            } else {
+                                0
+                            }
                             
                             repository.updateProgress(task.id, progress, totalBytesRead, speed)
                             updateNotification("上传中", "${task.fileName} - $progress%")
@@ -724,7 +762,13 @@ class TransferService : Service() {
                     }
                     
                     // 最终进度更新
-                    repository.updateProgress(task.id, 100, task.fileSize, 0)
+                        val finalTransferredBytes = if (task.fileSize > 0) {
+                            totalBytesRead.coerceAtMost(task.fileSize)
+                        } else {
+                            totalBytesRead
+                        }
+                        repository.updateProgress(task.id, 100, finalTransferredBytes, 0)
+                    }
                 }
             } catch (e: java.net.SocketTimeoutException) {
                 throw TransferException(
@@ -757,6 +801,8 @@ class TransferService : Service() {
             }
             
             Log.d(TAG, "上传完成: ${task.fileName}")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: TransferException) {
             // 直接抛出 TransferException
             throw e
@@ -769,10 +815,45 @@ class TransferService : Service() {
             )
         } finally {
             try {
+                remoteFile?.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "关闭远程文件时出错: ${e.message}")
+            }
+            try {
                 smbManager.disconnect()
             } catch (e: Exception) {
                 Log.w(TAG, "断开连接时出错: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * 为上传任务创建输入流，兼容普通文件路径和系统文件选择器返回的 content URI。
+     */
+    private fun openTaskInputStream(task: TransferTask): InputStream {
+        return if (task.localPath.startsWith("content://")) {
+            val uri = Uri.parse(task.localPath)
+            applicationContext.contentResolver.openInputStream(uri) ?: throw TransferException(
+                TransferErrorType.FILE_ERROR,
+                "无法读取所选文件"
+            )
+        } else {
+            val localFile = File(task.localPath)
+            if (!localFile.exists()) {
+                throw TransferException(
+                    TransferErrorType.FILE_ERROR,
+                    "本地文件不存在: ${task.localPath}"
+                )
+            }
+
+            if (!localFile.canRead()) {
+                throw TransferException(
+                    TransferErrorType.FILE_ERROR,
+                    "无法读取本地文件: 权限不足"
+                )
+            }
+
+            FileInputStream(localFile)
         }
     }
 

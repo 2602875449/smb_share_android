@@ -878,27 +878,47 @@ private fun openFile(
     task: com.qi.smbshare.data.model.TransferTask,
     onInstallApk: (File) -> Unit
 ) {
-    val file = File(task.localPath)
-    
-    if (!file.exists()) {
-        // 文件不存在，无法打开
-        return
-    }
-    
+    val isContentUri = task.localPath.startsWith("content://")
+
     // 如果是 APK 文件，使用安装回调
     if (task.fileName.endsWith(".apk", ignoreCase = true)) {
-        onInstallApk(file)
+        if (isContentUri) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(task.localPath), "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        } else {
+            val file = File(task.localPath)
+            if (!file.exists()) {
+                return
+            }
+            onInstallApk(file)
+        }
         return
     }
-    
+
     // 其他文件类型，使用系统默认应用打开
     try {
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
-        
+        val uri = if (isContentUri) {
+            Uri.parse(task.localPath)
+        } else {
+            val file = File(task.localPath)
+            if (!file.exists()) {
+                return
+            }
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+        }
+
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, getMimeType(task.fileName))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

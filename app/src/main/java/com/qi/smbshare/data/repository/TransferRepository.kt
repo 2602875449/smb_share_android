@@ -300,7 +300,7 @@ class TransferRepository(
         val task = entity.toModel()
         
         // 计算预计剩余时间
-        val remainingBytes = task.fileSize - transferredBytes
+        val remainingBytes = (task.fileSize - transferredBytes).coerceAtLeast(0)
         val estimatedTimeRemaining = if (speed > 0) {
             (remainingBytes * 1000) / speed  // 转换为毫秒
         } else {
