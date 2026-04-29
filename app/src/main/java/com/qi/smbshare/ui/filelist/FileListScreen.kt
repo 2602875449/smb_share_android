@@ -201,11 +201,17 @@ fun FileListScreen(
     // 监听 message 变化，显示 Snackbar 提示
     LaunchedEffect(state.message) {
         state.message?.let { message ->
-            if (message.contains("下载已开始") || message.contains("上传已开始")) {
-                snackbarHostState.showSnackbar(message)
-                // 清除 message，避免重复显示
-                viewModel.handleIntent(FileListIntent.ClearMessage)
-            }
+            snackbarHostState.showSnackbar(message)
+            // 清除 message，避免重复显示
+            viewModel.handleIntent(FileListIntent.ClearMessage)
+        }
+    }
+
+    // 普通错误统一用 Snackbar，避免在文件列表上堆叠固定错误卡片
+    LaunchedEffect(state.error) {
+        state.error?.let { error ->
+            snackbarHostState.showSnackbar(error)
+            viewModel.handleIntent(FileListIntent.ClearError)
         }
     }
 
@@ -473,39 +479,7 @@ fun FileListScreen(
                 }
             }
 
-            // 错误提示
-            state.error?.let { error ->
-                Card(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = error,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(
-                            onClick = { viewModel.handleIntent(FileListIntent.ClearError) }
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_close))
-                        }
-                    }
-                }
-            }
-
-            // 成功消息提示已改为使用 Snackbar 显示，不再使用 Card
+            // 操作结果和普通错误都通过 Snackbar 显示，页面内只保留内容状态
 
             // 创建文件夹对话框
             if (state.showCreateFolderDialog) {

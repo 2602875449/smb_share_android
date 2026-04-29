@@ -2,8 +2,10 @@ package com.qi.smbshare.ui.connection
 
 import android.app.Application
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.qi.smbshare.R
 import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.repository.ConnectionRepository
@@ -93,11 +95,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         loadConnectionsJob = viewModelScope.launch {
             connectionRepository.getSavedConfigs()
                 .catch { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "加载配置失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_load_connections_failed)
                     _state.value = _state.value.copy(error = errorMessage)
                 }
                 .collect { configs ->
@@ -119,11 +117,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                     )
                 }
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "保存配置失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_save_connection_failed)
                     _state.value = _state.value.copy(
                         isLoading = false,
                         error = errorMessage
@@ -140,11 +134,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                     _state.value = _state.value.copy(isLoading = false)
                 }
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "删除配置失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_delete_connection_failed)
                     _state.value = _state.value.copy(
                         isLoading = false,
                         error = errorMessage
@@ -175,11 +165,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                             )
                         }
                         .onFailure { e ->
-                            val errorMessage = if (e is Exception) {
-                                ErrorHandler.getErrorMessageFromException(e)
-                            } else {
-                                "连接失败: ${e.message}"
-                            }
+                            val errorMessage = formatError(e, R.string.error_connect_failed)
                             _state.value = _state.value.copy(
                                 isConnecting = false,
                                 error = errorMessage
@@ -187,11 +173,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                         }
                 }
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "保存配置失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_save_connection_failed)
                     _state.value = _state.value.copy(
                         isConnecting = false,
                         error = errorMessage
@@ -220,16 +202,12 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                     Log.d(TAG, "连接测试成功")
                     _state.value = _state.value.copy(
                         isTesting = false,
-                        testResult = "连接测试成功"
+                        testResult = text(R.string.msg_test_success)
                     )
                 }
                 .onFailure { e ->
                     Log.e(TAG, "连接测试失败", e)
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "连接测试失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_connection_test_failed)
                     _state.value = _state.value.copy(
                         isTesting = false,
                         testResult = null,
@@ -275,6 +253,22 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             isAnonymous = newAnonymous,
             currentConfig = newConfig
         )
+    }
+
+    private fun text(@StringRes resId: Int): String {
+        return getApplication<Application>().getString(resId)
+    }
+
+    private fun formatError(error: Throwable, @StringRes fallbackResId: Int): String {
+        return if (error is Exception) {
+            ErrorHandler.getErrorMessageFromException(
+                context = getApplication(),
+                exception = error,
+                fallbackMessageResId = fallbackResId
+            )
+        } else {
+            text(fallbackResId)
+        }
     }
 
     override fun onCleared() {

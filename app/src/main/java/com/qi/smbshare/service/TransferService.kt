@@ -207,10 +207,10 @@ class TransferService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             NOTIFICATION_CHANNEL_ID,
-            "文件传输",
+            getString(R.string.transfer_notification_channel_name),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "显示文件上传和下载进度"
+            description = getString(R.string.transfer_notification_channel_description)
             setShowBadge(false)
         }
         notificationManager.createNotificationChannel(channel)
@@ -220,8 +220,8 @@ class TransferService : Service() {
      * 创建持久通知
      */
     private fun createNotification(
-        title: String = "文件传输服务",
-        content: String = "传输服务正在运行"
+        title: String = getString(R.string.transfer_notification_service_title),
+        content: String = getString(R.string.transfer_notification_service_content)
     ): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
@@ -302,7 +302,7 @@ class TransferService : Service() {
                     repository.updateTaskStatus(
                         taskId,
                         TransferStatus.FAILED,
-                        e.message ?: "未知错误"
+                        getString(R.string.transfer_error_unknown)
                     )
                 } finally {
                     transferSemaphore.release()
@@ -402,11 +402,11 @@ class TransferService : Service() {
      */
     private fun formatErrorMessage(exception: TransferException): String {
         return when (exception.errorType) {
-            TransferErrorType.NETWORK_ERROR -> "网络连接失败: ${exception.message}"
-            TransferErrorType.TIMEOUT_ERROR -> "连接超时: ${exception.message}"
-            TransferErrorType.FILE_ERROR -> "文件错误: ${exception.message}"
-            TransferErrorType.AUTH_ERROR -> "认证失败: ${exception.message}"
-            TransferErrorType.UNKNOWN_ERROR -> "未知错误: ${exception.message}"
+            TransferErrorType.NETWORK_ERROR -> getString(R.string.transfer_error_network)
+            TransferErrorType.TIMEOUT_ERROR -> getString(R.string.transfer_error_timeout)
+            TransferErrorType.FILE_ERROR -> getString(R.string.transfer_error_file)
+            TransferErrorType.AUTH_ERROR -> getString(R.string.transfer_error_auth)
+            TransferErrorType.UNKNOWN_ERROR -> getString(R.string.transfer_error_unknown)
         }
     }
     
@@ -587,7 +587,10 @@ class TransferService : Service() {
                                 }
                                 
                                 repository.updateProgress(task.id, progress, totalBytesRead, speed)
-                                updateNotification("下载中", "${task.fileName} - $progress%")
+                                updateNotification(
+                                    getString(R.string.transfer_notification_downloading),
+                                    getString(R.string.transfer_notification_progress, task.fileName, progress)
+                                )
                                 
                                 lastUpdateTime = currentTime
                                 lastBytesRead = totalBytesRead
@@ -754,7 +757,10 @@ class TransferService : Service() {
                             }
                             
                             repository.updateProgress(task.id, progress, totalBytesRead, speed)
-                            updateNotification("上传中", "${task.fileName} - $progress%")
+                            updateNotification(
+                                getString(R.string.transfer_notification_uploading),
+                                getString(R.string.transfer_notification_progress, task.fileName, progress)
+                            )
                             
                             lastUpdateTime = currentTime
                             lastBytesRead = totalBytesRead
@@ -883,7 +889,10 @@ class TransferService : Service() {
                         activeTransferJobs.keys.forEach { taskId ->
                             pauseTransfer(taskId)
                         }
-                        updateNotification("WiFi 已断开", "所有传输已暂停")
+                        updateNotification(
+                            getString(R.string.transfer_notification_wifi_lost_title),
+                            getString(R.string.transfer_notification_wifi_lost_content)
+                        )
                     }
                 }
             }
@@ -896,7 +905,10 @@ class TransferService : Service() {
                     Log.d(TAG, "WiFi 连接可用")
                     serviceScope.launch {
                         // 通知用户 WiFi 已连接
-                        updateNotification("WiFi 已连接", "可以恢复传输")
+                        updateNotification(
+                            getString(R.string.transfer_notification_wifi_available_title),
+                            getString(R.string.transfer_notification_wifi_available_content)
+                        )
                         // 注意：不自动恢复传输，因为可能切换到了不同的 WiFi 网络
                         // 需要用户确认是否在同一局域网内
                     }
@@ -918,7 +930,10 @@ class TransferService : Service() {
                         activeTransferJobs.keys.forEach { taskId ->
                             pauseTransfer(taskId)
                         }
-                        updateNotification("已切换到移动网络", "传输已暂停")
+                        updateNotification(
+                            getString(R.string.transfer_notification_cellular_title),
+                            getString(R.string.transfer_notification_cellular_content)
+                        )
                     }
                 }
             }

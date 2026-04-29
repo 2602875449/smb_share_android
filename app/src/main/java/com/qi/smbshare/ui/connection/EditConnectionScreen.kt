@@ -12,12 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qi.smbshare.data.model.SMBConfig
-import com.qi.smbshare.util.FToastUtil
 import com.qi.smbshare.R
 import androidx.compose.ui.res.stringResource
 
@@ -32,16 +30,23 @@ fun EditConnectionScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
-    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // 处理系统返回键
     BackHandler(onBack = onBack)
 
-    // 监听测试结果，使用Toast显示
+    // 连接测试属于业务结果提示，和错误一样统一走 Snackbar
     LaunchedEffect(state.testResult) {
         state.testResult?.let { result ->
-            FToastUtil.show(context, result)
-            // 显示后清除测试结果
+            snackbarHostState.showSnackbar(result)
+            viewModel.handleIntent(ConnectionIntent.ClearError)
+        }
+    }
+
+    // 普通保存/连接/测试错误统一用 Snackbar，表单内不再堆叠固定错误卡片
+    LaunchedEffect(state.error) {
+        state.error?.let { error ->
+            snackbarHostState.showSnackbar(error)
             viewModel.handleIntent(ConnectionIntent.ClearError)
         }
     }
@@ -74,6 +79,9 @@ fun EditConnectionScreen(
     }
 
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+        },
         topBar = {
             Surface(
                 color = Color.Transparent,
@@ -110,31 +118,6 @@ fun EditConnectionScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 错误提示（测试失败也会显示在这里）
-                state.error?.let { error ->
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = error,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            IconButton(onClick = { viewModel.handleIntent(ConnectionIntent.ClearError) }) {
-                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_close))
-                            }
-                        }
-                    }
-                }
-
                 // 配置名称
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
@@ -339,4 +322,3 @@ private fun canConnect(state: ConnectionState): Boolean {
 private fun canSave(state: ConnectionState): Boolean {
     return canConnect(state)
 }
-

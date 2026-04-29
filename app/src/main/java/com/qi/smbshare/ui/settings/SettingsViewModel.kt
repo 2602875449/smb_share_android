@@ -3,6 +3,7 @@ package com.qi.smbshare.ui.settings
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.qi.smbshare.R
 import com.qi.smbshare.data.local.DataStoreManager
 import com.qi.smbshare.data.model.ThemeMode
 import com.qi.smbshare.util.LanguageHelper
@@ -99,7 +100,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     val cacheDir = getApplication<Application>().cacheDir
                     formatFileSize(getDirSize(cacheDir))
                 } catch (e: Exception) {
-                    "未知"
+                    getApplication<Application>().getString(R.string.settings_value_unknown)
                 }
             }
             _state.value = _state.value.copy(cacheSize = size)
@@ -115,7 +116,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 try {
                     StorageHelper.getDisplayDownloadPath(getApplication())
                 } catch (e: Exception) {
-                    "未知"
+                    getApplication<Application>().getString(R.string.settings_value_unknown)
                 }
             }
             _state.value = _state.value.copy(downloadDirectory = path)

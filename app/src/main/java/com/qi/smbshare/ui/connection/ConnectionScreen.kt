@@ -98,11 +98,10 @@ fun ConnectionScreen(
         }
     }
     
-    // 监听测试结果，使用Toast显示
+    // 连接测试属于业务结果提示，和错误一样统一走 Snackbar
     LaunchedEffect(state.testResult) {
         state.testResult?.let { result ->
-            FToastUtil.show(context, result)
-            // 显示后清除测试结果
+            snackbarHostState.showSnackbar(result)
             viewModel.handleIntent(ConnectionIntent.ClearError)
         }
     }

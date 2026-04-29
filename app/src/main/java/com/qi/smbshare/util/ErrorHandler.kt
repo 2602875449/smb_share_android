@@ -1,5 +1,8 @@
 package com.qi.smbshare.util
 
+import android.content.Context
+import androidx.annotation.StringRes
+import com.qi.smbshare.R
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -14,12 +17,33 @@ object ErrorHandler {
     /**
      * 应用错误类型
      */
-    sealed class AppError {
-        data class NetworkError(val message: String) : AppError()
-        data class AuthenticationError(val message: String) : AppError()
-        data class PermissionError(val message: String) : AppError()
-        data class FileOperationError(val message: String) : AppError()
-        data class UnknownError(val message: String) : AppError()
+    sealed class AppError(
+        @param:StringRes val messageResId: Int,
+        val fallbackMessage: String
+    ) {
+        data class NetworkError(
+            @param:StringRes val resId: Int,
+            val message: String
+        ) : AppError(resId, message)
+
+        data class AuthenticationError(
+            @param:StringRes val resId: Int,
+            val message: String
+        ) : AppError(resId, message)
+
+        data class PermissionError(
+            @param:StringRes val resId: Int,
+            val message: String
+        ) : AppError(resId, message)
+
+        data class FileOperationError(
+            @param:StringRes val resId: Int,
+            val message: String
+        ) : AppError(resId, message)
+
+        data class UnknownError(
+            val detail: String
+        ) : AppError(R.string.error_operation_failed, "操作失败，请稍后重试")
     }
     
     /**
@@ -30,13 +54,22 @@ object ErrorHandler {
     fun handleException(exception: Exception): AppError {
         return when (exception) {
             is SocketTimeoutException -> {
-                AppError.NetworkError("连接超时，请检查网络或服务器地址")
+                AppError.NetworkError(
+                    R.string.error_network_timeout,
+                    "连接超时，请检查网络或服务器地址"
+                )
             }
             is UnknownHostException -> {
-                AppError.NetworkError("无法找到服务器，请检查服务器地址")
+                AppError.NetworkError(
+                    R.string.error_network_unknown_host,
+                    "无法找到服务器，请检查服务器地址"
+                )
             }
             is FileNotFoundException -> {
-                AppError.FileOperationError("文件不存在或已被删除")
+                AppError.FileOperationError(
+                    R.string.error_file_not_found,
+                    "文件不存在或已被删除"
+                )
             }
             is IOException -> {
                 val cause = exception.cause
@@ -53,31 +86,55 @@ object ErrorHandler {
                 when {
                     cause is SocketTimeoutException ||
                     containsKeyword("timeout", "超时") -> {
-                        AppError.NetworkError("连接超时，请检查网络或服务器地址")
+                        AppError.NetworkError(
+                            R.string.error_network_timeout,
+                            "连接超时，请检查网络或服务器地址"
+                        )
                     }
                     cause is UnknownHostException ||
                     containsKeyword("unknown host", "no address associated", "无法找到服务器") -> {
-                        AppError.NetworkError("无法找到服务器，请检查服务器地址")
+                        AppError.NetworkError(
+                            R.string.error_network_unknown_host,
+                            "无法找到服务器，请检查服务器地址"
+                        )
                     }
                     containsKeyword("Authentication", "认证", "password", "密码") -> {
-                        AppError.AuthenticationError("用户名或密码错误")
+                        AppError.AuthenticationError(
+                            R.string.error_authentication_failed,
+                            "用户名或密码错误"
+                        )
                     }
                     containsKeyword("Permission", "权限") -> {
-                        AppError.PermissionError("没有存储权限，无法完成操作")
+                        AppError.PermissionError(
+                            R.string.error_permission_storage,
+                            "没有存储权限，无法完成操作"
+                        )
                     }
                     containsKeyword("Network", "网络") -> {
-                        AppError.NetworkError("网络连接不可用，请检查网络设置")
+                        AppError.NetworkError(
+                            R.string.error_network_unavailable,
+                            "网络连接不可用，请检查网络设置"
+                        )
                     }
                     containsKeyword("failed to connect", "unreachable", "refused") -> {
-                        AppError.NetworkError("无法连接服务器，请检查网络或服务器状态")
+                        AppError.NetworkError(
+                            R.string.error_network_server_unreachable,
+                            "无法连接服务器，请检查网络或服务器状态"
+                        )
                     }
                     else -> {
-                        AppError.FileOperationError("文件操作失败，请重试")
+                        AppError.FileOperationError(
+                            R.string.error_file_operation_failed,
+                            "文件操作失败，请稍后重试"
+                        )
                     }
                 }
             }
             is SecurityException -> {
-                AppError.PermissionError("没有存储权限，无法完成操作")
+                AppError.PermissionError(
+                    R.string.error_permission_storage,
+                    "没有存储权限，无法完成操作"
+                )
             }
             else -> {
                 // 尝试从异常消息中提取有用信息
@@ -85,25 +142,40 @@ object ErrorHandler {
                 when {
                     message.contains("timeout", ignoreCase = true) ||
                     message.contains("超时", ignoreCase = true) -> {
-                        AppError.NetworkError("连接超时，请检查网络或服务器地址")
+                        AppError.NetworkError(
+                            R.string.error_network_timeout,
+                            "连接超时，请检查网络或服务器地址"
+                        )
                     }
                     message.contains("authentication", ignoreCase = true) ||
                     message.contains("认证", ignoreCase = true) ||
                     message.contains("password", ignoreCase = true) ||
                     message.contains("密码", ignoreCase = true) -> {
-                        AppError.AuthenticationError("用户名或密码错误")
+                        AppError.AuthenticationError(
+                            R.string.error_authentication_failed,
+                            "用户名或密码错误"
+                        )
                     }
                     message.contains("permission", ignoreCase = true) ||
                     message.contains("权限", ignoreCase = true) -> {
-                        AppError.PermissionError("没有存储权限，无法完成操作")
+                        AppError.PermissionError(
+                            R.string.error_permission_storage,
+                            "没有存储权限，无法完成操作"
+                        )
                     }
                     message.contains("network", ignoreCase = true) ||
                     message.contains("网络", ignoreCase = true) -> {
-                        AppError.NetworkError("网络连接不可用，请检查网络设置")
+                        AppError.NetworkError(
+                            R.string.error_network_unavailable,
+                            "网络连接不可用，请检查网络设置"
+                        )
                     }
                     message.contains("file", ignoreCase = true) ||
                     message.contains("文件", ignoreCase = true) -> {
-                        AppError.FileOperationError(message)
+                        AppError.FileOperationError(
+                            R.string.error_file_operation_failed,
+                            "文件操作失败，请稍后重试"
+                        )
                     }
                     else -> {
                         AppError.UnknownError(message)
@@ -120,12 +192,19 @@ object ErrorHandler {
      */
     fun getErrorMessage(error: AppError): String {
         return when (error) {
-            is AppError.NetworkError -> error.message
-            is AppError.AuthenticationError -> error.message
-            is AppError.PermissionError -> error.message
-            is AppError.FileOperationError -> error.message
-            is AppError.UnknownError -> "操作失败: ${error.message}"
+            is AppError.NetworkError -> error.fallbackMessage
+            is AppError.AuthenticationError -> error.fallbackMessage
+            is AppError.PermissionError -> error.fallbackMessage
+            is AppError.FileOperationError -> error.fallbackMessage
+            is AppError.UnknownError -> error.fallbackMessage
         }
+    }
+
+    /**
+     * 获取跟随当前语言的用户友好错误文案。
+     */
+    fun getErrorMessage(context: Context, error: AppError): String {
+        return context.getString(error.messageResId)
     }
     
     /**
@@ -157,6 +236,25 @@ object ErrorHandler {
     fun getErrorMessageFromException(exception: Exception): String {
         val error = handleException(exception)
         return getErrorMessage(error)
+    }
+
+    /**
+     * 从异常获取本地化错误文案。无法归类的异常使用当前操作的兜底提示，避免直接暴露底层异常文本。
+     */
+    fun getErrorMessageFromException(
+        context: Context,
+        exception: Exception,
+        @StringRes fallbackMessageResId: Int? = null
+    ): String {
+        val error = handleException(exception)
+        val shouldUseOperationFallback = error is AppError.UnknownError ||
+            (error is AppError.FileOperationError && error.messageResId == R.string.error_file_operation_failed)
+
+        return if (shouldUseOperationFallback && fallbackMessageResId != null) {
+            context.getString(fallbackMessageResId)
+        } else {
+            getErrorMessage(context, error)
+        }
     }
     
     /**

@@ -2,7 +2,9 @@ package com.qi.smbshare.ui.filelist
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.annotation.StringRes
 import androidx.lifecycle.viewModelScope
+import com.qi.smbshare.R
 import com.qi.smbshare.data.local.DataStoreManager
 import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.FileItem
@@ -136,11 +138,7 @@ class FileListViewModel(
                     dataStoreManager.saveLastAccess(config.id, _state.value.currentPath)
                 }
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "连接失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_connect_failed)
                     _state.value = _state.value.copy(
                         isLoading = false,
                         error = errorMessage
@@ -168,11 +166,7 @@ class FileListViewModel(
 
             ensureConnected()
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "重新连接失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_reconnect_failed)
                     _state.value = _state.value.copy(
                         isLoading = false,
                         error = errorMessage
@@ -200,11 +194,7 @@ class FileListViewModel(
                     )
                 }
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "加载文件列表失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_load_file_list_failed)
                     _state.value = _state.value.copy(
                         isLoading = false,
                         error = errorMessage
@@ -288,11 +278,7 @@ class FileListViewModel(
                 // 确保连接有效
                 ensureConnected()
                     .onFailure { e ->
-                        val errorMessage = if (e is Exception) {
-                            ErrorHandler.getErrorMessageFromException(e)
-                        } else {
-                            "重新连接失败: ${e.message}"
-                        }
+                        val errorMessage = formatError(e, R.string.error_reconnect_failed)
                         _state.value = _state.value.copy(error = errorMessage)
                         return@launch
                     }
@@ -321,10 +307,10 @@ class FileListViewModel(
                 // 下载任务已创建，显示统一提示
                 _state.value = _state.value.copy(
                     error = null,
-                    message = "下载已开始"
+                    message = text(R.string.msg_download_started)
                 )
             } catch (e: Exception) {
-                val errorMessage = ErrorHandler.getErrorMessageFromException(e)
+                val errorMessage = formatError(e, R.string.error_download_start_failed)
                 _state.value = _state.value.copy(error = errorMessage)
             }
         }
@@ -338,11 +324,7 @@ class FileListViewModel(
                 // 确保连接有效
                 ensureConnected()
                     .onFailure { e ->
-                        val errorMessage = if (e is Exception) {
-                            ErrorHandler.getErrorMessageFromException(e)
-                        } else {
-                            "重新连接失败: ${e.message}"
-                        }
+                        val errorMessage = formatError(e, R.string.error_reconnect_failed)
                         _state.value = _state.value.copy(
                             isUploading = false,
                             error = errorMessage
@@ -372,11 +354,11 @@ class FileListViewModel(
                 _state.value = _state.value.copy(
                     isUploading = false,
                     error = null,
-                    message = "上传已开始"
+                    message = text(R.string.msg_upload_started)
                 )
                 
             } catch (e: Exception) {
-                val errorMessage = ErrorHandler.getErrorMessageFromException(e)
+                val errorMessage = formatError(e, R.string.error_upload_start_failed)
                 _state.value = _state.value.copy(
                     isUploading = false,
                     error = errorMessage
@@ -392,11 +374,7 @@ class FileListViewModel(
             // 确保连接有效
             ensureConnected()
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "重新连接失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_reconnect_failed)
                     _state.value = _state.value.copy(
                         isOperating = false,
                         error = errorMessage
@@ -415,11 +393,7 @@ class FileListViewModel(
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "创建文件夹失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_create_folder_failed)
                     _state.value = _state.value.copy(
                         isOperating = false,
                         error = errorMessage
@@ -435,11 +409,7 @@ class FileListViewModel(
             // 确保连接有效
             ensureConnected()
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "重新连接失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_reconnect_failed)
                     _state.value = _state.value.copy(
                         isOperating = false,
                         error = errorMessage
@@ -455,11 +425,7 @@ class FileListViewModel(
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "删除失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_delete_failed)
                     _state.value = _state.value.copy(
                         isOperating = false,
                         error = errorMessage
@@ -475,11 +441,7 @@ class FileListViewModel(
             // 确保连接有效
             ensureConnected()
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "重新连接失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_reconnect_failed)
                     _state.value = _state.value.copy(
                         isOperating = false,
                         error = errorMessage
@@ -495,16 +457,28 @@ class FileListViewModel(
                     loadFiles() // 刷新文件列表
                 }
                 .onFailure { e ->
-                    val errorMessage = if (e is Exception) {
-                        ErrorHandler.getErrorMessageFromException(e)
-                    } else {
-                        "重命名失败: ${e.message}"
-                    }
+                    val errorMessage = formatError(e, R.string.error_rename_failed)
                     _state.value = _state.value.copy(
                         isOperating = false,
                         error = errorMessage
                     )
                 }
+        }
+    }
+
+    private fun text(@StringRes resId: Int): String {
+        return getApplication<Application>().getString(resId)
+    }
+
+    private fun formatError(error: Throwable, @StringRes fallbackResId: Int): String {
+        return if (error is Exception) {
+            ErrorHandler.getErrorMessageFromException(
+                context = getApplication(),
+                exception = error,
+                fallbackMessageResId = fallbackResId
+            )
+        } else {
+            text(fallbackResId)
         }
     }
 

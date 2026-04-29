@@ -1,11 +1,14 @@
 package com.qi.smbshare.ui.transfer
 
 import android.app.Application
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.qi.smbshare.R
 import com.qi.smbshare.data.model.TransferStatus
 import com.qi.smbshare.data.model.TransferType
 import com.qi.smbshare.data.repository.TransferRepository
+import com.qi.smbshare.util.ErrorHandler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -139,9 +142,9 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
         viewModelScope.launch {
             try {
                 transferRepository.pauseTransfer(taskId)
-                _state.value = _state.value.copy(message = "任务已暂停")
+                _state.value = _state.value.copy(message = text(R.string.transfer_task_paused))
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = "暂停失败: ${e.message}")
+                _state.value = _state.value.copy(error = formatError(e, R.string.error_pause_transfer_failed))
             }
         }
     }
@@ -153,9 +156,9 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
         viewModelScope.launch {
             try {
                 transferRepository.resumeTransfer(taskId)
-                _state.value = _state.value.copy(message = "任务已恢复")
+                _state.value = _state.value.copy(message = text(R.string.transfer_task_resumed))
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = "恢复失败: ${e.message}")
+                _state.value = _state.value.copy(error = formatError(e, R.string.error_resume_transfer_failed))
             }
         }
     }
@@ -167,9 +170,9 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
         viewModelScope.launch {
             try {
                 transferRepository.cancelTransfer(taskId)
-                _state.value = _state.value.copy(message = "任务已取消")
+                _state.value = _state.value.copy(message = text(R.string.transfer_task_cancelled))
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = "取消失败: ${e.message}")
+                _state.value = _state.value.copy(error = formatError(e, R.string.error_cancel_transfer_failed))
             }
         }
     }
@@ -182,12 +185,12 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
             try {
                 val newTaskId = transferRepository.retryTransfer(taskId)
                 if (newTaskId != null) {
-                    _state.value = _state.value.copy(message = "任务已重新开始")
+                    _state.value = _state.value.copy(message = text(R.string.transfer_task_restarted))
                 } else {
-                    _state.value = _state.value.copy(error = "重试失败：任务状态不正确")
+                    _state.value = _state.value.copy(error = text(R.string.error_retry_transfer_invalid_state))
                 }
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = "重试失败: ${e.message}")
+                _state.value = _state.value.copy(error = formatError(e, R.string.error_retry_transfer_failed))
             }
         }
     }
@@ -222,16 +225,16 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
                 
                 // 显示成功消息
                 val message = if (deleteFile && fileDeleted) {
-                    "任务和文件已删除"
+                    text(R.string.transfer_task_and_file_deleted)
                 } else if (deleteFile) {
-                    "任务已删除（文件删除失败）"
+                    text(R.string.transfer_task_deleted_file_failed)
                 } else {
-                    "任务已删除"
+                    text(R.string.transfer_task_deleted)
                 }
                 
                 _state.value = _state.value.copy(message = message)
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = "删除失败: ${e.message}")
+                _state.value = _state.value.copy(error = formatError(e, R.string.error_delete_transfer_failed))
             }
         }
     }
@@ -290,7 +293,7 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
                 val selectedIds = _state.value.selectedTaskIds.toList()
                 
                 if (selectedIds.isEmpty()) {
-                    _state.value = _state.value.copy(error = "请先选择要删除的任务")
+                    _state.value = _state.value.copy(error = text(R.string.transfer_selected_delete_empty))
                     return@launch
                 }
                 
@@ -321,14 +324,14 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
                 // 退出多选模式
                 val message = if (deleteFiles) {
                     if (deletedCount == selectedIds.size) {
-                        "已删除 ${selectedIds.size} 个任务和文件"
+                        text(R.string.transfer_delete_batch_tasks_and_files, selectedIds.size)
                     } else if (deletedCount > 0) {
-                        "已删除 ${selectedIds.size} 个任务（${deletedCount} 个文件删除成功）"
+                        text(R.string.transfer_delete_batch_tasks_file_partial, selectedIds.size, deletedCount)
                     } else {
-                        "已删除 ${selectedIds.size} 个任务（文件删除失败）"
+                        text(R.string.transfer_delete_batch_tasks_file_failed, selectedIds.size)
                     }
                 } else {
-                    "已删除 ${selectedIds.size} 个任务"
+                    text(R.string.transfer_delete_batch_tasks, selectedIds.size)
                 }
                 
                 _state.value = _state.value.copy(
@@ -337,7 +340,7 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
                     message = message
                 )
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = "批量删除失败: ${e.message}")
+                _state.value = _state.value.copy(error = formatError(e, R.string.error_delete_selected_failed))
             }
         }
     }
@@ -351,7 +354,7 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
                 val selectedIds = _state.value.selectedTaskIds.toList()
                 
                 if (selectedIds.isEmpty()) {
-                    _state.value = _state.value.copy(error = "请先选择要取消的任务")
+                    _state.value = _state.value.copy(error = text(R.string.transfer_selected_cancel_empty))
                     return@launch
                 }
                 
@@ -370,11 +373,27 @@ class TransferManagerViewModel(application: Application) : AndroidViewModel(appl
                 _state.value = _state.value.copy(
                     isMultiSelectMode = false,
                     selectedTaskIds = emptySet(),
-                    message = "已取消 $successCount 个任务"
+                    message = text(R.string.transfer_cancel_batch_tasks, successCount)
                 )
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = "批量取消失败: ${e.message}")
+                _state.value = _state.value.copy(error = formatError(e, R.string.error_cancel_selected_failed))
             }
+        }
+    }
+
+    private fun text(@StringRes resId: Int, vararg formatArgs: Any): String {
+        return getApplication<Application>().getString(resId, *formatArgs)
+    }
+
+    private fun formatError(error: Throwable, @StringRes fallbackResId: Int): String {
+        return if (error is Exception) {
+            ErrorHandler.getErrorMessageFromException(
+                context = getApplication(),
+                exception = error,
+                fallbackMessageResId = fallbackResId
+            )
+        } else {
+            text(fallbackResId)
         }
     }
 }

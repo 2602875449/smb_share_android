@@ -43,8 +43,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.qi.smbshare.R
 import com.qi.smbshare.data.model.TransferStatus
 import com.qi.smbshare.data.model.TransferTask
 import com.qi.smbshare.data.model.TransferType
@@ -132,8 +134,8 @@ fun TransferTaskItem(
                             TransferType.UPLOAD -> Icons.Default.FileUpload
                         },
                         contentDescription = when (task.type) {
-                            TransferType.DOWNLOAD -> "下载"
-                            TransferType.UPLOAD -> "上传"
+                            TransferType.DOWNLOAD -> stringResource(R.string.transfer_type_download)
+                            TransferType.UPLOAD -> stringResource(R.string.transfer_type_upload)
                         },
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
@@ -170,7 +172,7 @@ fun TransferTaskItem(
                                 IconButton(onClick = onPause) {
                                     Icon(
                                         Icons.Default.Pause,
-                                        contentDescription = "暂停",
+                                        contentDescription = stringResource(R.string.transfer_action_pause),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -181,7 +183,7 @@ fun TransferTaskItem(
                                 IconButton(onClick = onResume) {
                                     Icon(
                                         Icons.Default.PlayArrow,
-                                        contentDescription = "继续",
+                                        contentDescription = stringResource(R.string.transfer_action_resume),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -192,7 +194,7 @@ fun TransferTaskItem(
                                 IconButton(onClick = onRetry) {
                                     Icon(
                                         Icons.Default.Refresh,
-                                        contentDescription = "重试",
+                                        contentDescription = stringResource(R.string.transfer_action_retry),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -221,7 +223,7 @@ fun TransferTaskItem(
                             IconButton(onClick = onCancel) {
                                 Icon(
                                     Icons.Default.Cancel,
-                                    contentDescription = "取消",
+                                    contentDescription = stringResource(R.string.action_cancel),
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -235,7 +237,7 @@ fun TransferTaskItem(
                             IconButton(onClick = onDelete) {
                                 Icon(
                                     Icons.Default.Delete,
-                                    contentDescription = "删除",
+                                    contentDescription = stringResource(R.string.action_delete),
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -259,6 +261,11 @@ fun TransferTaskItem(
                 // 进行中时显示实时信息
                 if (task.status == TransferStatus.ACTIVE) {
                     // 使用 FlowRow 让实时信息在窄屏下自动换行，避免挤在进度条上方
+                    val remainingTimeText = if (task.estimatedTimeRemaining > 0) {
+                        formatRemainingTime(task.estimatedTimeRemaining)
+                    } else {
+                        null
+                    }
                     val infoItems = buildList {
                         add("${task.progress}%" to MaterialTheme.colorScheme.onSurfaceVariant)
                         add(
@@ -274,9 +281,9 @@ fun TransferTaskItem(
                             )
                         }
 
-                        if (task.estimatedTimeRemaining > 0) {
+                        if (remainingTimeText != null) {
                             add(
-                                formatRemainingTime(task.estimatedTimeRemaining) to
+                                remainingTimeText to
                                     MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -305,7 +312,7 @@ fun TransferTaskItem(
             // 错误信息（失败时显示）
             if (task.status == TransferStatus.FAILED && task.errorMessage != null) {
                 Text(
-                    text = "错误: ${task.errorMessage}",
+                    text = stringResource(R.string.transfer_error_prefix, task.errorMessage),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -322,12 +329,12 @@ fun TransferTaskItem(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Warning,
-                        contentDescription = "文件已失效",
+                        contentDescription = stringResource(R.string.transfer_file_invalid),
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "文件已失效或被移动",
+                        text = stringResource(R.string.transfer_file_invalid_message),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -344,12 +351,12 @@ fun TransferTaskItem(
 @Composable
 private fun StatusChip(status: TransferStatus) {
     val (text, color) = when (status) {
-        TransferStatus.PENDING -> "等待中" to MaterialTheme.colorScheme.onSurfaceVariant
-        TransferStatus.ACTIVE -> "进行中" to MaterialTheme.colorScheme.primary
-        TransferStatus.PAUSED -> "已暂停" to MaterialTheme.colorScheme.tertiary
-        TransferStatus.COMPLETED -> "已完成" to MaterialTheme.colorScheme.primary
-        TransferStatus.FAILED -> "失败" to MaterialTheme.colorScheme.error
-        TransferStatus.CANCELLED -> "已取消" to MaterialTheme.colorScheme.onSurfaceVariant
+        TransferStatus.PENDING -> stringResource(R.string.transfer_status_pending) to MaterialTheme.colorScheme.onSurfaceVariant
+        TransferStatus.ACTIVE -> stringResource(R.string.transfer_status_active) to MaterialTheme.colorScheme.primary
+        TransferStatus.PAUSED -> stringResource(R.string.transfer_status_paused) to MaterialTheme.colorScheme.tertiary
+        TransferStatus.COMPLETED -> stringResource(R.string.transfer_status_completed) to MaterialTheme.colorScheme.primary
+        TransferStatus.FAILED -> stringResource(R.string.transfer_status_failed) to MaterialTheme.colorScheme.error
+        TransferStatus.CANCELLED -> stringResource(R.string.transfer_status_cancelled) to MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Surface(
@@ -369,12 +376,13 @@ private fun StatusChip(status: TransferStatus) {
  * 格式化剩余时间
  * 将毫秒转换为易读的时间格式
  */
+@Composable
 private fun formatRemainingTime(milliseconds: Long): String {
     val seconds = milliseconds / 1000
     return when {
-        seconds < 60 -> "${seconds}秒"
-        seconds < 3600 -> "${seconds / 60}分钟"
-        else -> "${seconds / 3600}小时"
+        seconds < 60 -> stringResource(R.string.transfer_time_seconds, seconds)
+        seconds < 3600 -> stringResource(R.string.transfer_time_minutes, seconds / 60)
+        else -> stringResource(R.string.transfer_time_hours, seconds / 3600)
     }
 }
 
@@ -393,7 +401,7 @@ private fun OpenFileMenu(
         IconButton(onClick = { expanded = true }) {
             Icon(
                 Icons.Default.MoreVert,
-                contentDescription = "更多操作",
+                contentDescription = stringResource(R.string.action_more_options),
                 tint = MaterialTheme.colorScheme.primary
             )
         }
@@ -415,7 +423,7 @@ private fun OpenFileMenu(
                             modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
-                        Text("打开文件")
+                        Text(stringResource(R.string.transfer_action_open_file))
                     }
                 },
                 colors = MenuDefaults.itemColors(
@@ -440,7 +448,7 @@ private fun OpenFileMenu(
                             modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
-                        Text("打开文件夹")
+                        Text(stringResource(R.string.transfer_action_open_folder))
                     }
                 },
                 colors = MenuDefaults.itemColors(
