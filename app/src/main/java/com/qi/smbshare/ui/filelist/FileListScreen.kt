@@ -422,7 +422,12 @@ fun FileListScreen(
                                 // 点击列表空白区域时清除焦点，关闭键盘
                                 focusManager.clearFocus()
                             },
-                        contentPadding = PaddingValues(8.dp),
+                        contentPadding = PaddingValues(
+                            start = 8.dp,
+                            top = 8.dp,
+                            end = 8.dp,
+                            bottom = 96.dp
+                        ),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(state.filteredFiles) { file ->

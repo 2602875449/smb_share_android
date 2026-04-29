@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qi.smbshare.data.local.DataStoreManager
 import com.qi.smbshare.data.local.SMBConnectionManager
+import com.qi.smbshare.data.model.FileItem
 import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.repository.SMBFileRepository
 import com.qi.smbshare.data.repository.TransferRepository
@@ -151,9 +152,9 @@ class FileListViewModel(
     /**
      * 确保连接有效，如果断开则重新连接
      */
-    private suspend fun ensureConnected(): Result<Unit> {
+    private suspend fun ensureConnected(forceReconnect: Boolean = false): Result<Unit> {
         return withContext(Dispatchers.IO) {
-            if (!connectionManager.isConnected()) {
+            if (forceReconnect || !connectionManager.isConnected()) {
                 connectUseCase.execute(config)
             } else {
                 Result.success(Unit)
@@ -164,10 +165,34 @@ class FileListViewModel(
     private fun loadFiles() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
-            // 在IO线程执行网络操作
-            withContext(Dispatchers.IO) {
-                listFilesUseCase.execute(_state.value.currentPath)
+
+            ensureConnected()
+                .onFailure { e ->
+                    val errorMessage = if (e is Exception) {
+                        ErrorHandler.getErrorMessageFromException(e)
+                    } else {
+                        "重新连接失败: ${e.message}"
+                    }
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        error = errorMessage
+                    )
+                    return@launch
+                }
+
+            val result = loadFilesOnce(_state.value.currentPath)
+            val finalResult = if (result.isFailure && shouldReconnectAndRetry(result.exceptionOrNull())) {
+                // SMBJ 有时在共享已被服务端关闭后仍保留对象引用，重连后重试一次即可恢复刷新。
+                ensureConnected(forceReconnect = true)
+                    .fold(
+                        onSuccess = { loadFilesOnce(_state.value.currentPath) },
+                        onFailure = { Result.failure(it) }
+                    )
+            } else {
+                result
             }
+
+            finalResult
                 .onSuccess { files ->
                     _state.value = _state.value.copy(
                         files = files,
@@ -185,6 +210,22 @@ class FileListViewModel(
                         error = errorMessage
                     )
                 }
+        }
+    }
+
+    private suspend fun loadFilesOnce(path: String): Result<List<FileItem>> {
+        return withContext(Dispatchers.IO) {
+            listFilesUseCase.execute(path)
+        }
+    }
+
+    private fun shouldReconnectAndRetry(error: Throwable?): Boolean {
+        val message = error?.message.orEmpty()
+        val causeMessage = error?.cause?.message.orEmpty()
+        return listOf(message, causeMessage).any { text ->
+            text.contains("closed", ignoreCase = true) ||
+                text.contains("未连接", ignoreCase = true) ||
+                text.contains("connection", ignoreCase = true)
         }
     }
 
