@@ -1,5 +1,6 @@
 package com.qi.smbshare.ui.filelist
 
+import android.content.ClipData
 import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -7,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,20 +19,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -58,22 +65,28 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.view.WindowCompat
 import com.qi.smbshare.R
 import com.qi.smbshare.data.model.FileItem
 import com.qi.smbshare.ui.components.PermissionPermanentlyDeniedDialog
@@ -82,6 +95,7 @@ import com.qi.smbshare.ui.components.PermissionType
 import com.qi.smbshare.util.FileTypeHelper
 import com.qi.smbshare.util.PermissionManager
 import java.io.File
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,9 +111,34 @@ fun FileListScreen(
     var showFabMenu by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = context as? ComponentActivity
+    val view = LocalView.current
     val focusManager = LocalFocusManager.current
     val searchFocusRequester = remember { FocusRequester() }
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val pathCopiedMessage = stringResource(R.string.msg_path_copied)
+    val topBarColor = MaterialTheme.colorScheme.surface
+    val useLightStatusBarIcons = topBarColor.luminance() > 0.5f
+
+    @Suppress("DEPRECATION")
+    DisposableEffect(activity, view, topBarColor, useLightStatusBarIcons) {
+        val window = activity?.window
+        if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.statusBarColor = Color.Transparent.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                useLightStatusBarIcons
+        }
+
+        onDispose {
+            if (window != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                window.statusBarColor = topBarColor.toArgb()
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                    useLightStatusBarIcons
+            }
+        }
+    }
     
     // 权限相关状态
     var showPermissionRationale by remember { mutableStateOf(false) }
@@ -232,14 +271,15 @@ fun FileListScreen(
         },
         topBar = {
             Surface(
-                color = Color.Transparent,
+                color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 4.dp
             ) {
-                // 普通模式：显示标题和路径
+                // 普通模式：显示标题和当前连接
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
+                        .statusBarsPadding()
+                        .height(64.dp)
                         .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -267,15 +307,6 @@ fun FileListScreen(
                             overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (state.currentPath.isNotEmpty()) {
-                            Text(
-                                text = state.currentPath,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
                     if (state.canGoBack) {
                         IconButton(onClick = { viewModel.handleIntent(FileListIntent.GoBack) }) {
@@ -341,6 +372,28 @@ fun FileListScreen(
                     .fillMaxSize()
                     .padding(padding)
             ) {
+                PathBreadcrumbBar(
+                    serverPath = "${config.serverAddress}:${config.port}/${config.shareName}",
+                    currentPath = state.currentPath,
+                    onPathClick = { path ->
+                        focusManager.clearFocus()
+                        viewModel.handleIntent(FileListIntent.JumpToPath(path))
+                    },
+                    onCopyPath = { path ->
+                        val clipboardManager = context.getSystemService(
+                            android.content.ClipboardManager::class.java
+                        )
+                        clipboardManager.setPrimaryClip(
+                            ClipData.newPlainText(context.getString(R.string.label_path), path)
+                        )
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        // 复制是纯本地反馈，不进入 ViewModel 状态，避免与文件操作提示互相覆盖。
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(pathCopiedMessage)
+                        }
+                    }
+                )
+
                 // 搜索栏 - 始终显示在文件列表上方
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -646,6 +699,139 @@ fun FileListScreen(
                 )
             }
         }
+    }
+}
+
+private data class BreadcrumbSegment(
+    val name: String,
+    val path: String
+)
+
+@Composable
+private fun PathBreadcrumbBar(
+    serverPath: String,
+    currentPath: String,
+    onPathClick: (String) -> Unit,
+    onCopyPath: (String) -> Unit
+) {
+    val scrollState = rememberScrollState()
+    val rootLabel = stringResource(R.string.breadcrumb_root)
+    val segments = remember(currentPath, rootLabel) {
+        buildBreadcrumbSegments(currentPath, rootLabel)
+    }
+    val fullPath = remember(serverPath, currentPath) {
+        buildFullSmbPath(serverPath, currentPath)
+    }
+
+    LaunchedEffect(currentPath, scrollState.maxValue) {
+        if (scrollState.maxValue > 0) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(scrollState),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                segments.forEachIndexed { index, segment ->
+                    val isLast = index == segments.lastIndex
+                    Row(
+                        modifier = Modifier
+                            .clickable(enabled = !isLast) { onPathClick(segment.path) }
+                            .padding(horizontal = 4.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (index == 0) {
+                            Icon(
+                                imageVector = Icons.Default.Home,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = if (isLast) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                        Text(
+                            text = segment.name,
+                            style = if (isLast) {
+                                MaterialTheme.typography.bodyMedium
+                            } else {
+                                MaterialTheme.typography.bodySmall
+                            },
+                            color = if (isLast) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (!isLast) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.NavigateNext,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            IconButton(onClick = { onCopyPath(fullPath) }) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = stringResource(R.string.desc_copy_path),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private fun buildBreadcrumbSegments(currentPath: String, rootLabel: String): List<BreadcrumbSegment> {
+    val parts = currentPath
+        .trim('\\', '/')
+        .split('\\', '/')
+        .filter { it.isNotBlank() }
+
+    return buildList {
+        add(BreadcrumbSegment(rootLabel, ""))
+        var path = ""
+        parts.forEach { part ->
+            path = if (path.isEmpty()) part else "$path\\$part"
+            add(BreadcrumbSegment(part, path))
+        }
+    }
+}
+
+private fun buildFullSmbPath(serverPath: String, currentPath: String): String {
+    val normalizedPath = currentPath
+        .trim('\\', '/')
+        .replace('\\', '/')
+
+    return if (normalizedPath.isEmpty()) {
+        "smb://$serverPath/"
+    } else {
+        "smb://$serverPath/$normalizedPath"
     }
 }
 

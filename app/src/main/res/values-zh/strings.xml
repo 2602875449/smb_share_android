@@ -29,6 +29,8 @@
     <!-- File List Screen -->
     <string name="title_file_list">文件列表</string>
     <string name="label_path">路径：</string>
+    <string name="breadcrumb_root">根目录</string>
+    <string name="desc_copy_path">复制路径</string>
     <string name="action_upload_file">上传文件</string>
     <string name="action_new_folder">新建文件夹</string>
     <string name="hint_search_file">搜索文件...</string>
@@ -225,6 +227,7 @@
     <string name="error_cancel_selected_failed">批量取消失败，请稍后重试</string>
     <string name="msg_download_started">下载任务已创建</string>
     <string name="msg_upload_started">上传任务已创建</string>
+    <string name="msg_path_copied">路径已复制</string>
     
     <!-- About Screen -->
     <string name="about_title">关于</string>

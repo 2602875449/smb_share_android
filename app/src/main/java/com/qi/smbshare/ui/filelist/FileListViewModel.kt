@@ -43,7 +43,13 @@ class FileListViewModel(
     private val deleteFileUseCase = DeleteFileUseCase(fileRepository)
     private val renameFileUseCase = RenameFileUseCase(fileRepository)
 
-    private val _state = MutableStateFlow(FileListState(currentPath = initialPath))
+    private val initialBrowserPath = initialPath.trim('\\', '/')
+    private val _state = MutableStateFlow(
+        FileListState(
+            currentPath = initialBrowserPath,
+            pathHistory = buildPathHistory(initialBrowserPath)
+        )
+    )
     val state: StateFlow<FileListState> = _state.asStateFlow()
 
     init {
@@ -58,6 +64,9 @@ class FileListViewModel(
             }
             is FileListIntent.EnterDirectory -> {
                 enterDirectory(intent.path)
+            }
+            is FileListIntent.JumpToPath -> {
+                jumpToPath(intent.path)
             }
             is FileListIntent.GoBack -> {
                 goBack()
@@ -269,6 +278,39 @@ class FileListViewModel(
                 dataStoreManager.saveLastAccess(config.id, previousPath)
             }
             loadFiles()
+        }
+    }
+
+    private fun jumpToPath(path: String) {
+        val targetPath = path.trim('\\', '/')
+        if (targetPath == _state.value.currentPath) return
+
+        val newHistory = buildPathHistory(targetPath)
+        _state.value = _state.value.copy(
+            currentPath = targetPath,
+            pathHistory = newHistory
+        )
+        viewModelScope.launch {
+            dataStoreManager.saveLastAccess(config.id, targetPath)
+        }
+        loadFiles()
+    }
+
+    private fun buildPathHistory(path: String): List<String> {
+        if (path.isEmpty()) return emptyList()
+
+        val segments = path
+            .split('\\', '/')
+            .filter { it.isNotBlank() }
+
+        // 点击面包屑跳转时需要重建历史栈，保证系统返回键仍按目录层级返回。
+        return buildList {
+            add("")
+            var current = ""
+            segments.dropLast(1).forEach { segment ->
+                current = if (current.isEmpty()) segment else "$current\\$segment"
+                add(current)
+            }
         }
     }
 

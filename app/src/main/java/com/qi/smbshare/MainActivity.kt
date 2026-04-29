@@ -171,7 +171,16 @@ fun AppContent(onInstallApk: (File) -> Unit) {
         }
     }
 
+    val useFileListImmersiveBars = selectedTab == NavigationTab.FILE &&
+        currentConfig != null &&
+        !showEditScreen
+
     Scaffold(
+        contentWindowInsets = if (useFileListImmersiveBars) {
+            WindowInsets(0.dp)
+        } else {
+            ScaffoldDefaults.contentWindowInsets
+        },
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -517,4 +526,3 @@ private fun animateIntAsState(
     )
     return remember { derivedStateOf { animatedFloat.toInt() } }
 }
-

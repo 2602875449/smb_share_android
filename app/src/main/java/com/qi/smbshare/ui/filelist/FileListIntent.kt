@@ -5,6 +5,7 @@ import android.net.Uri
 sealed class FileListIntent {
     object LoadFiles : FileListIntent()
     data class EnterDirectory(val path: String) : FileListIntent()
+    data class JumpToPath(val path: String) : FileListIntent()
     object GoBack : FileListIntent()
     data class DownloadFile(val filePath: String, val fileName: String) : FileListIntent()
     object ClearError : FileListIntent()

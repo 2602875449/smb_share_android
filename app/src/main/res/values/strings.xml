@@ -29,6 +29,8 @@
     <!-- File List Screen -->
     <string name="title_file_list">File List</string>
     <string name="label_path">Path:</string>
+    <string name="breadcrumb_root">Root</string>
+    <string name="desc_copy_path">Copy path</string>
     <string name="action_upload_file">Upload File</string>
     <string name="action_new_folder">New Folder</string>
     <string name="hint_search_file">Search files...</string>
@@ -228,6 +230,7 @@
     <string name="error_cancel_selected_failed">Unable to cancel selected tasks. Please try again later.</string>
     <string name="msg_download_started">Download task created</string>
     <string name="msg_upload_started">Upload task created</string>
+    <string name="msg_path_copied">Path copied</string>
     
     <!-- About Screen -->
     <string name="about_title">About</string>
