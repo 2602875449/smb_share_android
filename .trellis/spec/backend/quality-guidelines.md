@@ -67,6 +67,63 @@
 - 手势取消时不触发业务返回。
 - 变更后至少运行 `./gradlew test assembleDebug`。
 
+### 场景：在线视频预览缓存
+
+#### 1. Scope / Trigger
+
+- Trigger: 将 SMB 远端视频写入本地 `cacheDir` 后交给播放器读取。
+- 目标：缓存文件生命周期由预览状态持有，避免路径注入、缓存泄漏或关闭预览后继续占用磁盘。
+
+#### 2. Signatures
+
+- `createVideoPreviewCacheFile(cacheDir: File, fileName: String, nowMillis: Long = System.currentTimeMillis()): File`
+- `deleteReadyVideoCache(previewState: PreviewState): Boolean`
+- `PreviewState.VideoDownloading(progress: Float)`，文件大小未知时 `progress < 0`。
+- `PreviewState.VideoReady(cacheFile: File)`，只表示本地缓存文件已完整写入。
+
+#### 3. Contracts
+
+- 远端文件名进入本地缓存路径前必须清理 `/`、`\` 等路径分隔符和不安全字符。
+- 下载中临时文件由预览协程 `finally` 删除；已进入 `VideoReady` 的文件由关闭预览或 `ViewModel.onCleared()` 删除。
+- 切换到另一个预览文件前，必须先删除上一份 `VideoReady` 缓存。
+- UI 只能读取 `VideoReady.cacheFile` 播放，不负责删除缓存文件。
+
+#### 4. Validation & Error Matrix
+
+- 文件大小获取失败 -> 继续下载，`progress = -1` 展示无确定进度。
+- SMB 流读取失败 -> 删除未移交临时文件，并显示预览失败错误。
+- 预览协程取消 -> 删除未移交临时文件，不触发业务返回或错误覆盖。
+- 关闭预览 / ViewModel 清理 -> 删除 `VideoReady.cacheFile`，状态恢复 `Idle`。
+
+#### 5. Good/Base/Bad Cases
+
+- Good：`../movie.mp4` 这样的远端名称创建出的缓存文件仍位于 app cache 目录内。
+- Good：打开视频 A 后切换视频 B，视频 A 的本地缓存被删除。
+- Base：文件大小未知时显示加载 spinner，完成后进入播放器。
+- Bad：直接把原始 SMB 文件名拼进 `File(cacheDir, fileName)`。
+- Bad：在 `AndroidView` / `PlayerView` 的 `onDispose` 中删除缓存，导致缓存生命周期散落在 UI 层。
+
+#### 6. Tests Required
+
+- 单测断言缓存文件创建会清理路径分隔符，并且 parent 仍是传入的 cache 目录。
+- 单测断言 `deleteReadyVideoCache(PreviewState.VideoReady(file))` 会删除真实文件。
+- 单测断言非 `VideoReady` 状态不会误删文件。
+- 文件类型单测只把 Media3 可合理处理的本地视频容器列为可预览。
+
+#### 7. Wrong vs Correct
+
+Wrong：
+
+```kotlin
+val cacheFile = File(cacheDir, "video_preview_$fileName")
+```
+
+Correct：
+
+```kotlin
+val cacheFile = createVideoPreviewCacheFile(cacheDir, fileName)
+```
+
 ---
 
 ## 主题与 UI 颜色

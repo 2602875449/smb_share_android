@@ -75,17 +75,47 @@ class FileTypeHelperTest {
     }
 
     @Test
-    fun `isPreviewable 对图片和文本文件返回 true`() {
+    fun `isVideoFile 对 Media3 支持的常见本地视频容器返回 true`() {
+        listOf(
+            "movie.mp4", "mobile.m4v", "mobile.3gp", "mobile.3G2",
+            "web.webm", "clip.MKV", "broadcast.ts", "hd.mts",
+            "bluray.m2ts", "stream.flv", "dvd.vob", "mpeg.mpg",
+            "mpeg.mpeg"
+        ).forEach { name ->
+            assertTrue("$name 应被识别为视频文件", FileTypeHelper.isVideoFile(name))
+        }
+    }
+
+    @Test
+    fun `isVideoFile 对非视频文件返回 false`() {
+        assertFalse(FileTypeHelper.isVideoFile("photo.jpg"))
+        assertFalse(FileTypeHelper.isVideoFile("notes.txt"))
+        assertFalse(FileTypeHelper.isVideoFile("app.apk"))
+        assertFalse(FileTypeHelper.isVideoFile("archive.zip"))
+        assertFalse(FileTypeHelper.isVideoFile("noextension"))
+        assertFalse(FileTypeHelper.isVideoFile("report.pdf"))
+        assertFalse(FileTypeHelper.isVideoFile("legacy.avi"))
+        assertFalse(FileTypeHelper.isVideoFile("windows.wmv"))
+        assertFalse(FileTypeHelper.isVideoFile("quicktime.mov"))
+        assertFalse(FileTypeHelper.isVideoFile("real.rmvb"))
+        assertFalse(FileTypeHelper.isVideoFile("open.ogv"))
+    }
+
+    @Test
+    fun `isPreviewable 对图片、文本和视频文件返回 true`() {
         assertTrue(FileTypeHelper.isPreviewable("photo.jpg"))
         assertTrue(FileTypeHelper.isPreviewable("photo.PNG"))
         assertTrue(FileTypeHelper.isPreviewable("notes.txt"))
         assertTrue(FileTypeHelper.isPreviewable("config.json"))
         assertTrue(FileTypeHelper.isPreviewable("readme.MD"))
+        // 视频类型现已支持在线预览
+        assertTrue(FileTypeHelper.isPreviewable("movie.mp4"))
+        assertTrue(FileTypeHelper.isPreviewable("clip.MKV"))
+        assertTrue(FileTypeHelper.isPreviewable("stream.flv"))
     }
 
     @Test
-    fun `isPreviewable 对视频、APK 等不可预览文件返回 false`() {
-        assertFalse(FileTypeHelper.isPreviewable("video.mp4"))
+    fun `isPreviewable 对 APK、压缩包、文档等不可预览文件返回 false`() {
         assertFalse(FileTypeHelper.isPreviewable("app.apk"))
         assertFalse(FileTypeHelper.isPreviewable("archive.zip"))
         assertFalse(FileTypeHelper.isPreviewable("document.pdf"))

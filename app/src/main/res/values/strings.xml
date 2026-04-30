@@ -240,6 +240,7 @@
     <string name="preview_text_truncated">File is too large; only the first 1 MB is shown.</string>
     <string name="preview_close">Close preview</string>
     <string name="preview_loading">Loading preview…</string>
+    <string name="preview_video_downloading">Buffering video… %1$d%%</string>
     <string name="error_pause_transfer_failed">Unable to pause. Please try again later.</string>
     <string name="error_resume_transfer_failed">Unable to resume. Please try again later.</string>
     <string name="error_cancel_transfer_failed">Unable to cancel. Please try again later.</string>

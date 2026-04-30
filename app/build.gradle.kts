@@ -116,6 +116,10 @@ dependencies {
     // Coil（图片加载：异步、内存/磁盘缓存、GIF 支持）
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
+
+    // Media3 ExoPlayer（视频在线预览：兼容常见视频格式）
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
     
     // Room
     implementation(libs.room.runtime)

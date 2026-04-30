@@ -5,11 +5,22 @@ import java.util.Date
 import java.util.Locale
 
 object FileTypeHelper {
+    private val previewVideoExtensions = setOf(
+        "mp4", "m4v", "3gp", "3g2", "webm", "mkv",
+        "ts", "mts", "m2ts", "flv", "vob", "mpg", "mpeg"
+    )
+
     /**
      * 判断是否为APK文件
      */
     fun isApkFile(fileName: String): Boolean {
         return fileName.lowercase().endsWith(".apk")
+    }
+
+    /** 判断是否为 Media3/ExoPlayer 可直接读取的本地视频容器 */
+    fun isVideoFile(fileName: String): Boolean {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        return extension in previewVideoExtensions
     }
 
     /**
@@ -34,9 +45,11 @@ object FileTypeHelper {
     }
 
     /**
-     * 判断文件是否支持应用内在线预览（图片或文本）
+     * 判断文件是否支持应用内在线预览（图片、文本、视频）
      */
-    fun isPreviewable(fileName: String): Boolean = isImageFile(fileName) || isTextFile(fileName)
+    fun isPreviewable(fileName: String): Boolean {
+        return isImageFile(fileName) || isTextFile(fileName) || isVideoFile(fileName)
+    }
 
     /**
      * 判断是否为文档文件
@@ -79,4 +92,3 @@ object FileTypeHelper {
         return dateFormat.format(date)
     }
 }
-

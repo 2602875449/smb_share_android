@@ -10,6 +10,16 @@ sealed class PreviewState {
     data class ImageReady(val bytes: ByteArray) : PreviewState()
     /** 文本预览：持有解码后的字符串内容，isTruncated 表示是否因超限而截断 */
     data class TextReady(val content: String, val isTruncated: Boolean = false) : PreviewState()
+    /**
+     * 视频缓存中：将 SMB 文件流式写入本地临时文件以便 ExoPlayer 播放。
+     * progress 为 0.0 ~ 1.0 的写入进度；文件大小未知时为 -1。
+     */
+    data class VideoDownloading(val progress: Float) : PreviewState()
+    /**
+     * 视频就绪：本地临时缓存文件已写完，ExoPlayer 可直接读取。
+     * 关闭预览或 ViewModel 销毁时由 ViewModel 负责删除该文件。
+     */
+    data class VideoReady(val cacheFile: java.io.File) : PreviewState()
     data class Error(val message: String) : PreviewState()
 }
 

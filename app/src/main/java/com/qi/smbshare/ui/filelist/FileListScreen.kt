@@ -973,7 +973,7 @@ private fun FileItemRow(
                                 Icon(Icons.Default.Download, contentDescription = null)
                             }
                         )
-                        // 仅对可预览类型（图片/文本）显示预览入口
+                        // 仅对可预览类型（图片/文本/视频）显示预览入口
                         if (com.qi.smbshare.util.FileTypeHelper.isPreviewable(file.name)) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_preview)) },
