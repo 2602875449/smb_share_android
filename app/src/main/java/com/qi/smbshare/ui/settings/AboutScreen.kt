@@ -49,7 +49,8 @@ import com.qi.smbshare.R
 fun AboutScreen(
     onBack: () -> Unit,
     onNavigateToPrivacyPolicy: () -> Unit,
-    onNavigateToLicenses: (() -> Unit)? = null
+    onNavigateToLicenses: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val packageInfo = try {
@@ -63,6 +64,7 @@ fun AboutScreen(
         packageInfo?.longVersionCode?.toString() ?: "1"
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             Surface(
                 color = Color.Transparent,

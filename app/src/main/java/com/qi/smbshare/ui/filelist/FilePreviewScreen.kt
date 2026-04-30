@@ -47,9 +47,11 @@ import com.qi.smbshare.R
 fun FilePreviewScreen(
     fileName: String,
     previewState: PreviewState,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = {

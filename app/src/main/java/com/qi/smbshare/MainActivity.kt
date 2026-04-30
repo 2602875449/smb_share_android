@@ -25,6 +25,7 @@ import com.qi.smbshare.ui.connection.ConnectionViewModel
 import com.qi.smbshare.ui.connection.EditConnectionScreen
 import com.qi.smbshare.ui.filelist.FileListScreen
 import com.qi.smbshare.ui.filelist.FileListViewModel
+import com.qi.smbshare.ui.components.PredictiveBackAnimatedContent
 import com.qi.smbshare.ui.settings.AboutScreen
 import com.qi.smbshare.ui.settings.PrivacyPolicyScreen
 import com.qi.smbshare.ui.settings.SettingsScreen
@@ -106,6 +107,7 @@ fun AppContent(onInstallApk: (File) -> Unit) {
     var initialPath by remember { mutableStateOf("") }
     var isRestoringLastAccess by remember { mutableStateOf(true) }
     var settingsDestination by remember { mutableStateOf(SettingsDestination.MAIN) }
+    var isFilePreviewVisible by remember { mutableStateOf(false) }
     val connectionViewModel: ConnectionViewModel = viewModel()
     val transferManagerViewModel: TransferManagerViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
@@ -158,16 +160,18 @@ fun AppContent(onInstallApk: (File) -> Unit) {
 
     // 处理设置页面的系统返回键
     if (selectedTab == NavigationTab.SETTINGS) {
-        // 从设置二级页面返回到设置主页
-        BackHandler(enabled = settingsDestination != SettingsDestination.MAIN) {
-            settingsDestination = SettingsDestination.MAIN
-        }
-        
         // 从设置主页返回到连接管理标签
         if (settingsDestination == SettingsDestination.MAIN) {
             BackHandler {
                 selectedTab = NavigationTab.CONNECTION
+                isFilePreviewVisible = false
             }
+        }
+    }
+
+    LaunchedEffect(selectedTab, currentConfig, showEditScreen) {
+        if (selectedTab != NavigationTab.FILE || currentConfig == null || showEditScreen) {
+            isFilePreviewVisible = false
         }
     }
 
@@ -182,85 +186,94 @@ fun AppContent(onInstallApk: (File) -> Unit) {
             ScaffoldDefaults.contentWindowInsets
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .height(if (isChinese) 70.dp else 64.dp)
-                    .shadow(
-                        elevation = 8.dp,
-                        shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
-                        spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                    )
-            ) {
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Cloud, contentDescription = stringResource(R.string.nav_connection)) },
-                    label = if (isChinese) { { Text(stringResource(R.string.nav_connection)) } } else null,
-                    selected = selectedTab == NavigationTab.CONNECTION,
-                    onClick = { selectedTab = NavigationTab.CONNECTION },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Folder, contentDescription = stringResource(R.string.nav_files)) },
-                    label = if (isChinese) { { Text(stringResource(R.string.nav_files)) } } else null,
-                    selected = selectedTab == NavigationTab.FILE,
-                    enabled = currentConfig != null,
-                    onClick = { 
-                        if (currentConfig != null) {
-                            selectedTab = NavigationTab.FILE
-                        }
-                    },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        disabledIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    )
-                )
-                NavigationBarItem(
-                    icon = { 
-                        BadgedIcon(
-                            icon = Icons.Default.SwapVert,
-                            badgeCount = activeTransferCount,
-                            hasActiveTransfers = activeTransferCount > 0
+            if (!isFilePreviewVisible) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .height(if (isChinese) 70.dp else 64.dp)
+                        .shadow(
+                            elevation = 8.dp,
+                            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                            spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                         )
-                    },
-                    label = if (isChinese) { { Text(stringResource(R.string.nav_transfer_manager)) } } else null,
-                    selected = selectedTab == NavigationTab.TRANSFER_MANAGER,
-                    onClick = { selectedTab = NavigationTab.TRANSFER_MANAGER },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ) {
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Cloud, contentDescription = stringResource(R.string.nav_connection)) },
+                        label = if (isChinese) { { Text(stringResource(R.string.nav_connection)) } } else null,
+                        selected = selectedTab == NavigationTab.CONNECTION,
+                        onClick = {
+                            selectedTab = NavigationTab.CONNECTION
+                            isFilePreviewVisible = false
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.nav_settings)) },
-                    label = if (isChinese) { { Text(stringResource(R.string.nav_settings)) } } else null,
-                    selected = selectedTab == NavigationTab.SETTINGS,
-                    onClick = { 
-                        selectedTab = NavigationTab.SETTINGS
-                        settingsDestination = SettingsDestination.MAIN
-                    },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Folder, contentDescription = stringResource(R.string.nav_files)) },
+                        label = if (isChinese) { { Text(stringResource(R.string.nav_files)) } } else null,
+                        selected = selectedTab == NavigationTab.FILE,
+                        enabled = currentConfig != null,
+                        onClick = {
+                            if (currentConfig != null) {
+                                selectedTab = NavigationTab.FILE
+                            }
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        )
                     )
-                )
+                    NavigationBarItem(
+                        icon = {
+                            BadgedIcon(
+                                icon = Icons.Default.SwapVert,
+                                badgeCount = activeTransferCount,
+                                hasActiveTransfers = activeTransferCount > 0
+                            )
+                        },
+                        label = if (isChinese) { { Text(stringResource(R.string.nav_transfer_manager)) } } else null,
+                        selected = selectedTab == NavigationTab.TRANSFER_MANAGER,
+                        onClick = {
+                            selectedTab = NavigationTab.TRANSFER_MANAGER
+                            isFilePreviewVisible = false
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.nav_settings)) },
+                        label = if (isChinese) { { Text(stringResource(R.string.nav_settings)) } } else null,
+                        selected = selectedTab == NavigationTab.SETTINGS,
+                        onClick = {
+                            selectedTab = NavigationTab.SETTINGS
+                            settingsDestination = SettingsDestination.MAIN
+                            isFilePreviewVisible = false
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
             }
         }
     ) { padding ->
@@ -326,6 +339,7 @@ fun AppContent(onInstallApk: (File) -> Unit) {
                                 selectedTab = NavigationTab.CONNECTION
                                 currentConfig = null
                                 initialPath = ""
+                                isFilePreviewVisible = false
                             }
                         }
                         
@@ -338,6 +352,10 @@ fun AppContent(onInstallApk: (File) -> Unit) {
                                 selectedTab = NavigationTab.CONNECTION
                                 currentConfig = null
                                 initialPath = ""
+                                isFilePreviewVisible = false
+                            },
+                            onPreviewVisibilityChange = { visible ->
+                                isFilePreviewVisible = visible
                             }
                         )
                     } else {
@@ -391,21 +409,31 @@ fun AppContent(onInstallApk: (File) -> Unit) {
                             )
                         }
                         SettingsDestination.PRIVACY_POLICY -> {
-                            PrivacyPolicyScreen(
-                                onBack = {
-                                    settingsDestination = SettingsDestination.MAIN
-                                }
-                            )
+                            PredictiveBackAnimatedContent(
+                                onBack = { settingsDestination = SettingsDestination.MAIN }
+                            ) { predictiveBackModifier ->
+                                PrivacyPolicyScreen(
+                                    onBack = {
+                                        settingsDestination = SettingsDestination.MAIN
+                                    },
+                                    modifier = predictiveBackModifier
+                                )
+                            }
                         }
                         SettingsDestination.ABOUT -> {
-                            AboutScreen(
-                                onBack = {
-                                    settingsDestination = SettingsDestination.MAIN
-                                },
-                                onNavigateToPrivacyPolicy = {
-                                    settingsDestination = SettingsDestination.PRIVACY_POLICY
-                                }
-                            )
+                            PredictiveBackAnimatedContent(
+                                onBack = { settingsDestination = SettingsDestination.MAIN }
+                            ) { predictiveBackModifier ->
+                                AboutScreen(
+                                    onBack = {
+                                        settingsDestination = SettingsDestination.MAIN
+                                    },
+                                    onNavigateToPrivacyPolicy = {
+                                        settingsDestination = SettingsDestination.PRIVACY_POLICY
+                                    },
+                                    modifier = predictiveBackModifier
+                                )
+                            }
                         }
                     }
                 }

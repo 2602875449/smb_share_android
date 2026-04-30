@@ -89,6 +89,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.view.WindowCompat
 import com.qi.smbshare.R
 import com.qi.smbshare.data.model.FileItem
+import com.qi.smbshare.ui.components.PredictiveBackAnimatedContent
 import com.qi.smbshare.ui.components.PermissionPermanentlyDeniedDialog
 import com.qi.smbshare.ui.components.PermissionRationaleDialog
 import com.qi.smbshare.ui.components.PermissionType
@@ -103,7 +104,8 @@ fun FileListScreen(
     viewModel: FileListViewModel,
     onInstallApk: (File) -> Unit,
     config: com.qi.smbshare.data.model.SMBConfig,
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onPreviewVisibilityChange: (Boolean) -> Unit = {}
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var folderName by remember { mutableStateOf("") }
@@ -139,16 +141,16 @@ fun FileListScreen(
             }
         }
     }
-    
+
     // 权限相关状态
     var showPermissionRationale by remember { mutableStateOf(false) }
     var showPermissionDenied by remember { mutableStateOf(false) }
     var permissionType by remember { mutableStateOf(PermissionType.STORAGE_DOWNLOAD) }
     var pendingDownloadFile by remember { mutableStateOf<Pair<String, String>?>(null) }
-    
+
     // 权限管理器引用 - 用于在启动器回调中访问
     var permissionManagerRef by remember { mutableStateOf<PermissionManager?>(null) }
-    
+
     // 权限请求启动器 - 必须在 Composable 顶层创建
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -156,12 +158,12 @@ fun FileListScreen(
         // 处理权限请求结果
         permissionManagerRef?.handlePermissionResult(permissions)
     }
-    
+
     // 权限管理器 - 使用启动器创建
     val permissionManager = remember(activity, permissionLauncher) {
         activity?.let { it ->
             PermissionManager(it, permissionLauncher).also {
-                permissionManagerRef = it 
+                permissionManagerRef = it
             }
         }
     }
@@ -191,7 +193,7 @@ fun FileListScreen(
             viewModel.handleIntent(FileListIntent.DownloadFile(filePath, fileName))
         }
     }
-    
+
     // 文件选择器
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -254,20 +256,34 @@ fun FileListScreen(
         }
     }
 
+    val isPreviewVisible = state.previewFileName != null
+    LaunchedEffect(isPreviewVisible) {
+        onPreviewVisibilityChange(isPreviewVisible)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            onPreviewVisibilityChange(false)
+        }
+    }
+
     // 预览页覆盖在文件列表之上（仿照 MainActivity 状态机模式）
-    if (state.previewFileName != null) {
-        // 必须在 return 之前注册，否则 BackHandler 不会生效，系统返回键会直接退出 App
-        BackHandler { viewModel.handleIntent(FileListIntent.ClosePreview) }
-        FilePreviewScreen(
-            fileName = state.previewFileName!!,
-            previewState = state.previewState,
-            onClose = { viewModel.handleIntent(FileListIntent.ClosePreview) }
-        )
+    if (isPreviewVisible) {
+        // 必须在 return 之前注册返回处理，否则系统返回键会直接退出 App
+        PredictiveBackAnimatedContent(
+            onBack = { viewModel.handleIntent(FileListIntent.ClosePreview) }
+        ) { predictiveBackModifier ->
+            FilePreviewScreen(
+                fileName = state.previewFileName!!,
+                previewState = state.previewState,
+                onClose = { viewModel.handleIntent(FileListIntent.ClosePreview) },
+                modifier = predictiveBackModifier
+            )
+        }
         return
     }
 
-    // 处理系统返回键 - 如果有上级目录则返回上级目录，否则返回主页
-    BackHandler {
+    val handleFileListBack = {
         if (state.canGoBack) {
             // 如果有上级目录，返回上级目录
             viewModel.handleIntent(FileListIntent.GoBack)
@@ -277,443 +293,454 @@ fun FileListScreen(
         }
     }
 
-    Scaffold(
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
-        },
-        topBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp
-            ) {
-                // 普通模式：显示标题和当前连接
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .height(64.dp)
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    IconButton(onClick = {
-                        if (state.canGoBack) {
-                            viewModel.handleIntent(FileListIntent.GoBack)
-                        } else {
-                            onBack()
-                        }
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.desc_back_to_connection))
-                    }
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.title_file_list),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = "${config.serverAddress}:${config.port}/${config.shareName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (state.canGoBack) {
-                        IconButton(onClick = { viewModel.handleIntent(FileListIntent.GoBack) }) {
-                            Icon(Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.desc_parent_directory))
-                        }
-                    }
-                    IconButton(onClick = { viewModel.handleIntent(FileListIntent.LoadFiles) }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.desc_refresh))
-                    }
-                }
-            }
-        },
-        floatingActionButton = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.End
-            ) {
-                // FAB菜单项 - 只在展开时显示
-                if (showFabMenu) {
-                    // 上传文件按钮
-                    FloatingActionButton(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                                type = "*/*"
-                                addCategory(Intent.CATEGORY_OPENABLE)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-                            }
-                            filePickerLauncher.launch(intent)
-                            showFabMenu = false
-                        },
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(Icons.Default.Upload, contentDescription = stringResource(R.string.action_upload_file))
-                    }
-                    // 新建文件夹按钮
-                    FloatingActionButton(
-                        onClick = {
-                            viewModel.handleIntent(FileListIntent.ShowCreateFolderDialog)
-                            showFabMenu = false
-                        },
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(Icons.Default.CreateNewFolder, contentDescription = stringResource(R.string.action_new_folder))
-                    }
-                }
-                // 主FAB按钮 - 始终显示
-                FloatingActionButton(
-                    onClick = { showFabMenu = !showFabMenu }
-                ) {
-                    Icon(
-                        if (showFabMenu) Icons.Default.Close else Icons.Default.Add,
-                        contentDescription = if (showFabMenu) stringResource(R.string.desc_close_menu) else stringResource(R.string.desc_open_menu)
-                    )
-                }
-            }
-        },
-        floatingActionButtonPosition = FabPosition.End
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            ) {
-                PathBreadcrumbBar(
-                    serverPath = "${config.serverAddress}:${config.port}/${config.shareName}",
-                    currentPath = state.currentPath,
-                    onPathClick = { path ->
-                        focusManager.clearFocus()
-                        viewModel.handleIntent(FileListIntent.JumpToPath(path))
-                    },
-                    onCopyPath = { path ->
-                        val clipboardManager = context.getSystemService(
-                            android.content.ClipboardManager::class.java
-                        )
-                        clipboardManager.setPrimaryClip(
-                            ClipData.newPlainText(context.getString(R.string.label_path), path)
-                        )
-                        snackbarHostState.currentSnackbarData?.dismiss()
-                        // 复制是纯本地反馈，不进入 ViewModel 状态，避免与文件操作提示互相覆盖。
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar(pathCopiedMessage)
-                        }
-                    }
-                )
+    // 文件夹层级返回保持原逻辑；根目录返回连接页时参与预测式返回动画。
+    BackHandler(enabled = state.canGoBack) {
+        handleFileListBack()
+    }
 
-                // 搜索栏 - 始终显示在文件列表上方
+    PredictiveBackAnimatedContent(
+        enabled = !state.canGoBack,
+        onBack = handleFileListBack
+    ) { predictiveBackModifier ->
+        Scaffold(
+            modifier = predictiveBackModifier,
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState)
+            },
+            topBar = {
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.Transparent,
-                    tonalElevation = 2.dp
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 4.dp
                 ) {
+                    // 普通模式：显示标题和当前连接
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                            .statusBarsPadding()
+                            .height(64.dp)
+                            .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        TextField(
-                            value = state.searchQuery,
-                            onValueChange = { query ->
-                                viewModel.handleIntent(FileListIntent.UpdateSearchQuery(query))
-                            },
-                            placeholder = { Text(stringResource(R.string.hint_search_file)) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .weight(1f)
-                                .focusRequester(searchFocusRequester),
-                            leadingIcon = {
-                                Icon(Icons.Default.Search, contentDescription = stringResource(R.string.desc_search))
-                            },
-                            trailingIcon = {
-                                if (state.searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = {
-                                        viewModel.handleIntent(
-                                            FileListIntent.UpdateSearchQuery("")
-                                        )
-                                        focusManager.clearFocus()
-                                    }) {
-                                        Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.desc_clear))
-                                    }
-                                }
-                            },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        IconButton(onClick = {
+                            if (state.canGoBack) {
+                                viewModel.handleIntent(FileListIntent.GoBack)
+                            } else {
+                                onBack()
+                            }
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.desc_back_to_connection))
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.title_file_list),
+                                style = MaterialTheme.typography.titleMedium
                             )
+                            Text(
+                                text = "${config.serverAddress}:${config.port}/${config.shareName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (state.canGoBack) {
+                            IconButton(onClick = { viewModel.handleIntent(FileListIntent.GoBack) }) {
+                                Icon(Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.desc_parent_directory))
+                            }
+                        }
+                        IconButton(onClick = { viewModel.handleIntent(FileListIntent.LoadFiles) }) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.desc_refresh))
+                        }
+                    }
+                }
+            },
+            floatingActionButton = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    // FAB菜单项 - 只在展开时显示
+                    if (showFabMenu) {
+                        // 上传文件按钮
+                        FloatingActionButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                    type = "*/*"
+                                    addCategory(Intent.CATEGORY_OPENABLE)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                                }
+                                filePickerLauncher.launch(intent)
+                                showFabMenu = false
+                            },
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Icon(Icons.Default.Upload, contentDescription = stringResource(R.string.action_upload_file))
+                        }
+                        // 新建文件夹按钮
+                        FloatingActionButton(
+                            onClick = {
+                                viewModel.handleIntent(FileListIntent.ShowCreateFolderDialog)
+                                showFabMenu = false
+                            },
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Icon(Icons.Default.CreateNewFolder, contentDescription = stringResource(R.string.action_new_folder))
+                        }
+                    }
+                    // 主FAB按钮 - 始终显示
+                    FloatingActionButton(
+                        onClick = { showFabMenu = !showFabMenu }
+                    ) {
+                        Icon(
+                            if (showFabMenu) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = if (showFabMenu) stringResource(R.string.desc_close_menu) else stringResource(R.string.desc_open_menu)
                         )
                     }
                 }
+            },
+            floatingActionButtonPosition = FabPosition.End
+        ) { padding ->
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                ) {
+                    PathBreadcrumbBar(
+                        serverPath = "${config.serverAddress}:${config.port}/${config.shareName}",
+                        currentPath = state.currentPath,
+                        onPathClick = { path ->
+                            focusManager.clearFocus()
+                            viewModel.handleIntent(FileListIntent.JumpToPath(path))
+                        },
+                        onCopyPath = { path ->
+                            val clipboardManager = context.getSystemService(
+                                android.content.ClipboardManager::class.java
+                            )
+                            clipboardManager.setPrimaryClip(
+                                ClipData.newPlainText(context.getString(R.string.label_path), path)
+                            )
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            // 复制是纯本地反馈，不进入 ViewModel 状态，避免与文件操作提示互相覆盖。
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(pathCopiedMessage)
+                            }
+                        }
+                    )
 
-                // 操作进度提示 - 轻量级顶部进度条
-                if (state.isOperating) {
-                    LinearProgressIndicator(
+                    // 搜索栏 - 始终显示在文件列表上方
+                    Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary
+                        color = Color.Transparent,
+                        tonalElevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextField(
+                                value = state.searchQuery,
+                                onValueChange = { query ->
+                                    viewModel.handleIntent(FileListIntent.UpdateSearchQuery(query))
+                                },
+                                placeholder = { Text(stringResource(R.string.hint_search_file)) },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .focusRequester(searchFocusRequester),
+                                leadingIcon = {
+                                    Icon(Icons.Default.Search, contentDescription = stringResource(R.string.desc_search))
+                                },
+                                trailingIcon = {
+                                    if (state.searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = {
+                                            viewModel.handleIntent(
+                                                FileListIntent.UpdateSearchQuery("")
+                                            )
+                                            focusManager.clearFocus()
+                                        }) {
+                                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.desc_clear))
+                                        }
+                                    }
+                                },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                                )
+                            )
+                        }
+                    }
+
+                    // 操作进度提示 - 轻量级顶部进度条
+                    if (state.isOperating) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // 文件列表内容
+                    if (state.isLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else if (state.filteredFiles.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (state.searchQuery.isNotEmpty()) stringResource(R.string.empty_search_result) else stringResource(R.string.empty_folder),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    // 点击列表空白区域时清除焦点，关闭键盘
+                                    focusManager.clearFocus()
+                                },
+                            contentPadding = PaddingValues(
+                                start = 8.dp,
+                                top = 8.dp,
+                                end = 8.dp,
+                                bottom = 96.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(state.filteredFiles) { file ->
+                                FileItemRow(
+                                    file = file,
+                                    onClick = {
+                                        // 清除搜索框焦点
+                                        focusManager.clearFocus()
+                                        if (file.isDirectory) {
+                                            viewModel.handleIntent(FileListIntent.EnterDirectory(file.name))
+                                        } else {
+                                            // 点击文件显示操作菜单
+                                            viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
+                                        }
+                                    },
+                                    onLongClick = {
+                                        // 清除搜索框焦点
+                                        focusManager.clearFocus()
+                                        // 长按显示操作菜单（文件和目录都支持）
+                                        viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
+                                    },
+                                    showMenu = state.fileMenuPath == file.path,
+                                    onMenuDismiss = {
+                                        viewModel.handleIntent(FileListIntent.HideFileMenu)
+                                    },
+                                    onDownload = {
+                                        checkPermissionAndDownload(file.path, file.name)
+                                        viewModel.handleIntent(FileListIntent.HideFileMenu)
+                                    },
+                                    onPreview = {
+                                        viewModel.handleIntent(
+                                            FileListIntent.PreviewFile(file.path, file.name)
+                                        )
+                                    },
+                                    onDelete = {
+                                        viewModel.handleIntent(FileListIntent.DeleteFile(file.path))
+                                        viewModel.handleIntent(FileListIntent.HideFileMenu)
+                                    },
+                                    onRename = {
+                                        viewModel.handleIntent(
+                                            FileListIntent.ShowRenameDialog(file.path, file.name)
+                                        )
+                                        viewModel.handleIntent(FileListIntent.HideFileMenu)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 操作结果和普通错误都通过 Snackbar 显示，页面内只保留内容状态
+
+                // 创建文件夹对话框
+                if (state.showCreateFolderDialog) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            viewModel.handleIntent(FileListIntent.HideCreateFolderDialog)
+                            folderName = ""
+                        },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.CreateNewFolder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        title = { Text(stringResource(R.string.dialog_title_new_folder)) },
+                        text = {
+                            TextField(
+                                value = folderName,
+                                onValueChange = { folderName = it },
+                                placeholder = { Text(stringResource(R.string.hint_folder_name)) },
+                                singleLine = true,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent
+                                )
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    if (folderName.isNotBlank()) {
+                                        viewModel.handleIntent(FileListIntent.CreateFolder(folderName))
+                                        folderName = ""
+                                    }
+                                }
+                            ) {
+                                Text(stringResource(R.string.action_create), color = MaterialTheme.colorScheme.primary)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    viewModel.handleIntent(FileListIntent.HideCreateFolderDialog)
+                                    folderName = ""
+                                }
+                            ) {
+                                Text(stringResource(R.string.action_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     )
                 }
 
-                // 文件列表内容
-                if (state.isLoading) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
+                // 重命名对话框
+                if (state.showRenameDialog) {
+                    LaunchedEffect(state.renameCurrentName) {
+                        renameName = state.renameCurrentName
                     }
-                } else if (state.filteredFiles.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (state.searchQuery.isNotEmpty()) stringResource(R.string.empty_search_result) else stringResource(R.string.empty_folder),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(
-                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                // 点击列表空白区域时清除焦点，关闭键盘
-                                focusManager.clearFocus()
-                            },
-                        contentPadding = PaddingValues(
-                            start = 8.dp,
-                            top = 8.dp,
-                            end = 8.dp,
-                            bottom = 96.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(state.filteredFiles) { file ->
-                            FileItemRow(
-                                file = file,
+                    AlertDialog(
+                        onDismissRequest = {
+                            viewModel.handleIntent(FileListIntent.HideRenameDialog)
+                            renameName = ""
+                        },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        title = { Text(stringResource(R.string.dialog_title_rename)) },
+                        text = {
+                            TextField(
+                                value = renameName,
+                                onValueChange = { renameName = it },
+                                placeholder = { Text(stringResource(R.string.hint_new_name)) },
+                                singleLine = true,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent
+                                )
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
                                 onClick = {
-                                    // 清除搜索框焦点
-                                    focusManager.clearFocus()
-                                    if (file.isDirectory) {
-                                        viewModel.handleIntent(FileListIntent.EnterDirectory(file.name))
-                                    } else {
-                                        // 点击文件显示操作菜单
-                                        viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
+                                    if (renameName.isNotBlank()) {
+                                        viewModel.handleIntent(
+                                            FileListIntent.RenameFile(state.renameFilePath, renameName)
+                                        )
+                                        renameName = ""
                                     }
-                                },
-                                onLongClick = {
-                                    // 清除搜索框焦点
-                                    focusManager.clearFocus()
-                                    // 长按显示操作菜单（文件和目录都支持）
-                                    viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
-                                },
-                                showMenu = state.fileMenuPath == file.path,
-                                onMenuDismiss = {
-                                    viewModel.handleIntent(FileListIntent.HideFileMenu)
-                                },
-                                onDownload = {
-                                    checkPermissionAndDownload(file.path, file.name)
-                                    viewModel.handleIntent(FileListIntent.HideFileMenu)
-                                },
-                                onPreview = {
-                                    viewModel.handleIntent(
-                                        FileListIntent.PreviewFile(file.path, file.name)
-                                    )
-                                },
-                                onDelete = {
-                                    viewModel.handleIntent(FileListIntent.DeleteFile(file.path))
-                                    viewModel.handleIntent(FileListIntent.HideFileMenu)
-                                },
-                                onRename = {
-                                    viewModel.handleIntent(
-                                        FileListIntent.ShowRenameDialog(file.path, file.name)
-                                    )
-                                    viewModel.handleIntent(FileListIntent.HideFileMenu)
                                 }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 操作结果和普通错误都通过 Snackbar 显示，页面内只保留内容状态
-
-            // 创建文件夹对话框
-            if (state.showCreateFolderDialog) {
-                AlertDialog(
-                    onDismissRequest = {
-                        viewModel.handleIntent(FileListIntent.HideCreateFolderDialog)
-                        folderName = ""
-                    },
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.CreateNewFolder,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    title = { Text(stringResource(R.string.dialog_title_new_folder)) },
-                    text = {
-                        TextField(
-                            value = folderName,
-                            onValueChange = { folderName = it },
-                            placeholder = { Text(stringResource(R.string.hint_folder_name)) },
-                            singleLine = true,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent
-                            )
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                if (folderName.isNotBlank()) {
-                                    viewModel.handleIntent(FileListIntent.CreateFolder(folderName))
-                                    folderName = ""
-                                }
+                            ) {
+                                Text(stringResource(R.string.action_confirm), color = MaterialTheme.colorScheme.primary)
                             }
-                        ) {
-                            Text(stringResource(R.string.action_create), color = MaterialTheme.colorScheme.primary)
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                viewModel.handleIntent(FileListIntent.HideCreateFolderDialog)
-                                folderName = ""
-                            }
-                        ) {
-                            Text(stringResource(R.string.action_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                )
-            }
-
-            // 重命名对话框
-            if (state.showRenameDialog) {
-                LaunchedEffect(state.renameCurrentName) {
-                    renameName = state.renameCurrentName
-                }
-                AlertDialog(
-                    onDismissRequest = {
-                        viewModel.handleIntent(FileListIntent.HideRenameDialog)
-                        renameName = ""
-                    },
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    title = { Text(stringResource(R.string.dialog_title_rename)) },
-                    text = {
-                        TextField(
-                            value = renameName,
-                            onValueChange = { renameName = it },
-                            placeholder = { Text(stringResource(R.string.hint_new_name)) },
-                            singleLine = true,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent
-                            )
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                if (renameName.isNotBlank()) {
-                                    viewModel.handleIntent(
-                                        FileListIntent.RenameFile(state.renameFilePath, renameName)
-                                    )
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    viewModel.handleIntent(FileListIntent.HideRenameDialog)
                                     renameName = ""
                                 }
+                            ) {
+                                Text(stringResource(R.string.action_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                        ) {
-                            Text(stringResource(R.string.action_confirm), color = MaterialTheme.colorScheme.primary)
                         }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                viewModel.handleIntent(FileListIntent.HideRenameDialog)
-                                renameName = ""
-                            }
-                        ) {
-                            Text(stringResource(R.string.action_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                )
-            }
-            
-            // 权限说明对话框
-            if (showPermissionRationale) {
-                PermissionRationaleDialog(
-                    permissionType = permissionType,
-                    onConfirm = {
-                        showPermissionRationale = false
-                        permissionManager?.requestDownloadPermission(
-                            onGranted = {
-                                // 权限授予后执行待处理的操作
-                                pendingDownloadFile?.let { (path, name) ->
-                                    viewModel.handleIntent(FileListIntent.DownloadFile(path, name))
+                    )
+                }
+
+                // 权限说明对话框
+                if (showPermissionRationale) {
+                    PermissionRationaleDialog(
+                        permissionType = permissionType,
+                        onConfirm = {
+                            showPermissionRationale = false
+                            permissionManager?.requestDownloadPermission(
+                                onGranted = {
+                                    // 权限授予后执行待处理的操作
+                                    pendingDownloadFile?.let { (path, name) ->
+                                        viewModel.handleIntent(FileListIntent.DownloadFile(path, name))
+                                        pendingDownloadFile = null
+                                    }
+                                },
+                                onDenied = {
+                                    // 用户拒绝了权限
+                                    pendingDownloadFile = null
+                                },
+                                onPermanentlyDenied = {
+                                    // 用户永久拒绝了权限
+                                    showPermissionDenied = true
                                     pendingDownloadFile = null
                                 }
-                            },
-                            onDenied = {
-                                // 用户拒绝了权限
-                                pendingDownloadFile = null
-                            },
-                            onPermanentlyDenied = {
-                                // 用户永久拒绝了权限
-                                showPermissionDenied = true
-                                pendingDownloadFile = null
-                            }
-                        )
-                    },
-                    onDismiss = {
-                        showPermissionRationale = false
-                        pendingDownloadFile = null
-                    }
-                )
-            }
-            
-            // 权限永久拒绝对话框
-            if (showPermissionDenied) {
-                PermissionPermanentlyDeniedDialog(
-                    permissionType = permissionType,
-                    onOpenSettings = {
-                        showPermissionDenied = false
-                        permissionManager?.openAppSettings()
-                    },
-                    onDismiss =  {
-                        showPermissionDenied = false
-                    }
-                )
+                            )
+                        },
+                        onDismiss = {
+                            showPermissionRationale = false
+                            pendingDownloadFile = null
+                        }
+                    )
+                }
+
+                // 权限永久拒绝对话框
+                if (showPermissionDenied) {
+                    PermissionPermanentlyDeniedDialog(
+                        permissionType = permissionType,
+                        onOpenSettings = {
+                            showPermissionDenied = false
+                            permissionManager?.openAppSettings()
+                        },
+                        onDismiss =  {
+                            showPermissionDenied = false
+                        }
+                    )
+                }
             }
         }
     }

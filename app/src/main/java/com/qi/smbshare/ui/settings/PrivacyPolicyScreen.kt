@@ -24,12 +24,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrivacyPolicyScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     // TODO: Replace with your actual privacy policy URL
     val privacyPolicyUrl = "https://superb-granita-404994.netlify.app"
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             Surface(
                 color = Color.Transparent,

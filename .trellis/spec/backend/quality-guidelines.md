@@ -48,6 +48,25 @@
 
 不要直接从 Composable 执行阻塞式 SMB、网络或磁盘工作。现有代码使用 `viewModelScope`、service、repository 和 `Dispatchers.IO` 执行这些工作。
 
+### 手动返回与预测式返回
+
+当页面由本地状态机控制，而不是由 `NavHost` 管理返回栈时，系统返回处理应继续保持原有业务语义，并优先复用共享 Compose helper 承接预测式返回进度。
+
+当前模式：
+
+- Manifest 通过 `android:enableOnBackInvokedCallback="true"` 启用系统返回回调。
+- 页面级 Composable 使用 `ui/components/PredictiveBackAnimatedContent` 包裹全屏内容，并把同一个 `onBack` 传入 helper 和顶部栏返回按钮。
+- 自定义进度动画保持轻量缩放/淡出，不做大幅横向位移，避免和系统边缘返回指示叠加后造成页面与底部导航错位。
+- 文件预览这类覆盖层可见时应隐藏主底部导航，避免返回手势过程中露出下层导航栏。
+- 如果返回存在多层业务语义，例如文件列表中“有上级目录则返回上级目录，否则返回连接页”，只让根页面返回连接页参与预测式返回动画；文件夹层级返回继续使用明确的 `BackHandler`。
+- 不要为了接入预测式返回重构 SMB、传输或持久化层；返回动画只属于 UI/导航层。
+
+检查点：
+
+- 系统返回、顶部栏返回按钮和旧系统普通返回键触发同一业务路径。
+- 手势取消时不触发业务返回。
+- 变更后至少运行 `./gradlew test assembleDebug`。
+
 ---
 
 ## 主题与 UI 颜色

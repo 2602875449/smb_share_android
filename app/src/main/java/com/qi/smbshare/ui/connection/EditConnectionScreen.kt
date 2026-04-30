@@ -1,6 +1,5 @@
 package com.qi.smbshare.ui.connection
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +18,7 @@ import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.model.SmbDiscoveryHost
 import com.qi.smbshare.data.model.SmbDiscoverySource
 import com.qi.smbshare.R
+import com.qi.smbshare.ui.components.PredictiveBackAnimatedContent
 import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,9 +39,6 @@ fun EditConnectionScreen(
             viewModel.handleIntent(ConnectionIntent.StopDiscovery)
         }
     }
-
-    // 处理系统返回键
-    BackHandler(onBack = onBack)
 
     // 连接测试属于业务结果提示，和错误一样统一走 Snackbar
     LaunchedEffect(state.testResult) {
@@ -93,222 +90,225 @@ fun EditConnectionScreen(
         }
     }
 
-    Scaffold(
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
-        },
-        topBar = {
-            Surface(
-                color = Color.Transparent,
-                tonalElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+    PredictiveBackAnimatedContent(onBack = onBack) { predictiveBackModifier ->
+        Scaffold(
+            modifier = predictiveBackModifier,
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState)
+            },
+            topBar = {
+                Surface(
+                    color = Color.Transparent,
+                    tonalElevation = 4.dp
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        }
+                        Text(
+                            text = if (configToEdit != null) stringResource(R.string.title_edit_connection) else stringResource(R.string.title_new_connection),
+                            style = MaterialTheme.typography.titleMedium
+                        )
                     }
-                    Text(
-                        text = if (configToEdit != null) stringResource(R.string.title_edit_connection) else stringResource(R.string.title_new_connection),
-                        style = MaterialTheme.typography.titleMedium
-                    )
                 }
             }
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
+        ) { padding ->
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(scrollState)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .fillMaxSize()
+                    .padding(padding)
             ) {
-                // 配置名称
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = state.formName,
-                    onValueChange = {
-                        viewModel.handleIntent(
-                            ConnectionIntent.UpdateFormField(FormField.NAME, it)
-                        )
-                    },
-                    label = { Text(stringResource(R.string.label_config_name)) },
-                    singleLine = true
-                )
-
-                // 服务器地址
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = state.formServerAddress,
-                    onValueChange = {
-                        viewModel.handleIntent(
-                            ConnectionIntent.UpdateFormField(FormField.SERVER_ADDRESS, it)
-                        )
-                    },
-                    label = { Text(stringResource(R.string.label_server_address)) },
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Default.Storage, contentDescription = null) }
-                )
-
-                // 端口
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = state.formPort,
-                    onValueChange = {
-                        viewModel.handleIntent(
-                            ConnectionIntent.UpdateFormField(FormField.PORT, it)
-                        )
-                    },
-                    label = { Text(stringResource(R.string.label_port)) },
-                    singleLine = true
-                )
-
-                SmbDiscoverySection(
-                    state = state,
-                    onStart = { viewModel.handleIntent(ConnectionIntent.StartDiscovery) },
-                    onProbeTarget = { viewModel.handleIntent(ConnectionIntent.ProbeDiscoveryTarget) },
-                    onTargetChange = { target ->
-                        viewModel.handleIntent(ConnectionIntent.UpdateDiscoveryTarget(target))
-                    },
-                    onStop = { viewModel.handleIntent(ConnectionIntent.StopDiscovery) },
-                    onSelect = { host ->
-                        viewModel.handleIntent(ConnectionIntent.SelectDiscoveredHost(host))
-                    }
-                )
-
-                // 共享名称
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = state.formShareName,
-                    onValueChange = {
-                        viewModel.handleIntent(
-                            ConnectionIntent.UpdateFormField(FormField.SHARE_NAME, it)
-                        )
-                    },
-                    label = { Text(stringResource(R.string.label_share_name)) },
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) }
-                )
-
-                // 匿名登录开关
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = state.isAnonymous,
-                        onCheckedChange = {
-                            viewModel.handleIntent(ConnectionIntent.ToggleAnonymous)
-                        }
-                    )
-                    Text(stringResource(R.string.label_anonymous))
-                }
-
-                // 用户名和密码（匿名登录时隐藏）
-                if (!state.isAnonymous) {
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = state.formUsername,
-                        onValueChange = {
-                            viewModel.handleIntent(
-                                ConnectionIntent.UpdateFormField(FormField.USERNAME, it)
-                            )
-                        },
-                        label = { Text(stringResource(R.string.label_username)) },
-                        singleLine = true,
-                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
-                    )
-
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = state.formPassword,
-                        onValueChange = {
-                            viewModel.handleIntent(
-                                ConnectionIntent.UpdateFormField(FormField.PASSWORD, it)
-                            )
-                        },
-                        label = { Text(stringResource(R.string.label_password)) },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
-                    )
-                }
-
-                // 按钮组 - 纵向排列，放在滚动区域内
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(scrollState)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // 测试连接按钮
-                    Button(
+                    // 配置名称
+                    OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            val config = buildConfigFromState(state)
-                            if (config != null) {
-                                viewModel.handleIntent(ConnectionIntent.TestConnection(config))
-                            }
-                        },
-                        enabled = !state.isTesting && canConnect(state)
-                    ) {
-                        if (state.isTesting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
+                        value = state.formName,
+                        onValueChange = {
+                            viewModel.handleIntent(
+                                ConnectionIntent.UpdateFormField(FormField.NAME, it)
                             )
-                        } else {
-                            Text(stringResource(R.string.btn_test_connection))
+                        },
+                        label = { Text(stringResource(R.string.label_config_name)) },
+                        singleLine = true
+                    )
+
+                    // 服务器地址
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = state.formServerAddress,
+                        onValueChange = {
+                            viewModel.handleIntent(
+                                ConnectionIntent.UpdateFormField(FormField.SERVER_ADDRESS, it)
+                            )
+                        },
+                        label = { Text(stringResource(R.string.label_server_address)) },
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Storage, contentDescription = null) }
+                    )
+
+                    // 端口
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = state.formPort,
+                        onValueChange = {
+                            viewModel.handleIntent(
+                                ConnectionIntent.UpdateFormField(FormField.PORT, it)
+                            )
+                        },
+                        label = { Text(stringResource(R.string.label_port)) },
+                        singleLine = true
+                    )
+
+                    SmbDiscoverySection(
+                        state = state,
+                        onStart = { viewModel.handleIntent(ConnectionIntent.StartDiscovery) },
+                        onProbeTarget = { viewModel.handleIntent(ConnectionIntent.ProbeDiscoveryTarget) },
+                        onTargetChange = { target ->
+                            viewModel.handleIntent(ConnectionIntent.UpdateDiscoveryTarget(target))
+                        },
+                        onStop = { viewModel.handleIntent(ConnectionIntent.StopDiscovery) },
+                        onSelect = { host ->
+                            viewModel.handleIntent(ConnectionIntent.SelectDiscoveredHost(host))
                         }
+                    )
+
+                    // 共享名称
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = state.formShareName,
+                        onValueChange = {
+                            viewModel.handleIntent(
+                                ConnectionIntent.UpdateFormField(FormField.SHARE_NAME, it)
+                            )
+                        },
+                        label = { Text(stringResource(R.string.label_share_name)) },
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) }
+                    )
+
+                    // 匿名登录开关
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = state.isAnonymous,
+                            onCheckedChange = {
+                                viewModel.handleIntent(ConnectionIntent.ToggleAnonymous)
+                            }
+                        )
+                        Text(stringResource(R.string.label_anonymous))
                     }
 
-                    // 保存配置按钮
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            val config = buildConfigFromState(state)
-                            if (config != null) {
-                                viewModel.handleIntent(ConnectionIntent.SaveConnection(config))
-                            }
-                        },
-                        enabled = !state.isLoading && canSave(state)
-                    ) {
-                        if (state.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(stringResource(R.string.btn_save_config))
-                        }
+                    // 用户名和密码（匿名登录时隐藏）
+                    if (!state.isAnonymous) {
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = state.formUsername,
+                            onValueChange = {
+                                viewModel.handleIntent(
+                                    ConnectionIntent.UpdateFormField(FormField.USERNAME, it)
+                                )
+                            },
+                            label = { Text(stringResource(R.string.label_username)) },
+                            singleLine = true,
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
+                        )
+
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = state.formPassword,
+                            onValueChange = {
+                                viewModel.handleIntent(
+                                    ConnectionIntent.UpdateFormField(FormField.PASSWORD, it)
+                                )
+                            },
+                            label = { Text(stringResource(R.string.label_password)) },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+                        )
                     }
 
-                    // 连接按钮
-                    Button(
+                    // 按钮组 - 纵向排列，放在滚动区域内
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            val config = buildConfigFromState(state)
-                            if (config != null) {
-                                viewModel.handleIntent(ConnectionIntent.Connect(config))
-                            }
-                        },
-                        enabled = !state.isConnecting && canConnect(state)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (state.isConnecting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(stringResource(R.string.btn_connect))
+                        // 测试连接按钮
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                val config = buildConfigFromState(state)
+                                if (config != null) {
+                                    viewModel.handleIntent(ConnectionIntent.TestConnection(config))
+                                }
+                            },
+                            enabled = !state.isTesting && canConnect(state)
+                        ) {
+                            if (state.isTesting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(stringResource(R.string.btn_test_connection))
+                            }
+                        }
+
+                        // 保存配置按钮
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                val config = buildConfigFromState(state)
+                                if (config != null) {
+                                    viewModel.handleIntent(ConnectionIntent.SaveConnection(config))
+                                }
+                            },
+                            enabled = !state.isLoading && canSave(state)
+                        ) {
+                            if (state.isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(stringResource(R.string.btn_save_config))
+                            }
+                        }
+
+                        // 连接按钮
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                val config = buildConfigFromState(state)
+                                if (config != null) {
+                                    viewModel.handleIntent(ConnectionIntent.Connect(config))
+                                }
+                            },
+                            enabled = !state.isConnecting && canConnect(state)
+                        ) {
+                            if (state.isConnecting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(stringResource(R.string.btn_connect))
+                            }
                         }
                     }
                 }
