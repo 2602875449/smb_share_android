@@ -1,6 +1,7 @@
 package com.qi.smbshare.ui.connection
 
 import com.qi.smbshare.data.model.SMBConfig
+import com.qi.smbshare.data.model.SmbDiscoveryHost
 
 sealed class ConnectionIntent {
     object LoadConnections : ConnectionIntent()
@@ -13,6 +14,12 @@ sealed class ConnectionIntent {
         val value: String
     ) : ConnectionIntent()
     object ToggleAnonymous : ConnectionIntent()
+    object StartDiscovery : ConnectionIntent()
+    object ProbeDiscoveryTarget : ConnectionIntent()
+    data class UpdateDiscoveryTarget(val target: String) : ConnectionIntent()
+    object StopDiscovery : ConnectionIntent()
+    data class SelectDiscoveredHost(val host: SmbDiscoveryHost) : ConnectionIntent()
+    object ClearDiscoveryError : ConnectionIntent()
     object ClearError : ConnectionIntent()
     object ClearForm : ConnectionIntent()
     data class EditConfig(val config: SMBConfig) : ConnectionIntent()
@@ -28,4 +35,3 @@ enum class FormField {
     USERNAME,
     PASSWORD
 }
-

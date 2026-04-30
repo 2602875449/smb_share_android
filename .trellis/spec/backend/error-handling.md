@@ -1,18 +1,18 @@
-# Error Handling
+# 错误处理
 
-> Error handling conventions currently used by the Android app's data, domain, service, and UI layers.
+> Android 应用的数据、领域、服务和 UI 层当前使用的错误处理约定。
 
 ---
 
-## Central Error Mapping
+## 中央错误映射
 
-`ErrorHandler` is the central mapper from exceptions to user-friendly app error categories and localized messages.
+`ErrorHandler` 是将 exception 映射为用户友好的应用错误分类和本地化消息的中央 mapper。
 
-Example:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/util/ErrorHandler.kt`
 
-Current categories:
+当前分类：
 
 - `NetworkError`
 - `AuthenticationError`
@@ -20,25 +20,25 @@ Current categories:
 - `FileOperationError`
 - `UnknownError`
 
-`ErrorHandler.handleException()` classifies known exception types and selected message keywords. `getErrorMessage(context, error)` returns localized string resources. `getErrorMessageFromException(context, exception, fallbackMessageResId)` uses operation-level fallback messages for unknown or generic file-operation failures.
+`ErrorHandler.handleException()` 对已知 exception 类型和选定 message 关键词进行分类。`getErrorMessage(context, error)` 返回本地化 string resource。`getErrorMessageFromException(context, exception, fallbackMessageResId)` 对未知错误或通用文件操作失败使用操作级兜底消息。
 
-Tests:
+测试：
 
 - `app/src/test/java/com/qi/smbshare/util/ErrorHandlerTest.kt`
 
 ---
 
-## Use Case Pattern
+## 用例模式
 
-Use cases generally return `Result<T>` to ViewModels.
+用例（use case）通常向 ViewModel 返回 `Result<T>`。
 
-Current style:
+当前风格：
 
-- log operation start/success/failure.
-- catch `IOException` and return it as `Result.failure`.
-- catch unexpected exceptions and wrap file/network failures in `IOException` with a Chinese message.
+- 记录操作开始、成功和失败日志。
+- 捕获 `IOException` 并作为 `Result.failure` 返回。
+- 捕获非预期 exception，并将文件/网络失败包装为带中文消息的 `IOException`。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/domain/usecase/ConnectSMBUseCase.kt`
 - `app/src/main/java/com/qi/smbshare/domain/usecase/ListFilesUseCase.kt`
@@ -49,92 +49,92 @@ Examples:
 
 ---
 
-## Repository And SMB Error Pattern
+## Repository 与 SMB 错误模式
 
-SMB repositories perform concrete SMB operations and throw `IOException` with Chinese operational messages when work fails.
+SMB repository 执行具体 SMB 操作，并在工作失败时抛出带中文操作消息的 `IOException`。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/data/repository/SMBFileRepository.kt`
 - `app/src/main/java/com/qi/smbshare/data/local/SMBConnectionManager.kt`
 
-Current pattern in `SMBFileRepository`:
+`SMBFileRepository` 中的当前模式：
 
-- validate that a `DiskShare` connection exists.
-- normalize SMB paths to backslashes before operations.
-- log the failed operation, path, exception type, and message.
-- wrap unexpected failures as `IOException("<operation>失败: ${e.message}", e)`.
+- 校验 `DiskShare` 连接存在。
+- 操作前将 SMB 路径规范化为反斜杠。
+- 记录失败操作、路径、exception 类型和 message。
+- 将非预期失败包装为 `IOException("<operation>失败: ${e.message}", e)`。
 
-Preserve the existing SMB path behavior. Do not introduce a new path abstraction during normal feature work.
+保留现有 SMB 路径行为。常规功能工作中不要引入新的路径抽象。
 
 ---
 
-## ViewModel Error Pattern
+## ViewModel 错误模式
 
-ViewModels store user-facing errors in state and clear them after the screen consumes the message.
+ViewModel 将面向用户的错误保存在 state 中，并在 screen 消费消息后清除。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionViewModel.kt`
 - `app/src/main/java/com/qi/smbshare/ui/filelist/FileListViewModel.kt`
 - `app/src/main/java/com/qi/smbshare/ui/transfer/TransferManagerViewModel.kt`
 
-Current pattern:
+当前模式：
 
-- set loading flags before async work.
-- call use cases or repositories from `viewModelScope.launch`.
-- run blocking SMB/file work on `Dispatchers.IO` at call sites.
-- map exceptions through `ErrorHandler`.
-- set `error`, `message`, `testResult`, or navigation state in the feature state.
+- 在异步工作前设置 loading 标记。
+- 从 `viewModelScope.launch` 中调用 use case 或 repository。
+- 在调用点使用 `Dispatchers.IO` 执行阻塞式 SMB/file 工作。
+- 通过 `ErrorHandler` 映射 exception。
+- 在功能 state 中设置 `error`、`message`、`testResult` 或导航 state。
 
-Screens consume one-off state with `LaunchedEffect` and clear it through intents.
+Screen 使用 `LaunchedEffect` 消费一次性 state，并通过 intent 清除。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionScreen.kt`
 - `app/src/main/java/com/qi/smbshare/ui/filelist/FileListScreen.kt`
 
 ---
 
-## UI Error Display
+## UI 错误展示
 
-Errors are displayed with Snackbar-style UI and then cleared.
+错误通过 Snackbar 风格 UI 展示，然后清除。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/ui/components/ErrorSnackbar.kt`
 - `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionScreen.kt`
 - `app/src/main/java/com/qi/smbshare/ui/filelist/FileListScreen.kt`
 
-User-visible error strings should come from string resources where the current code supports localization.
+当前代码支持本地化的位置，面向用户的错误字符串应来自 string resource。
 
-Examples:
+示例：
 
 - `app/src/main/res/values/strings.xml`
 - `app/src/main/res/values-zh/strings.xml`
 
 ---
 
-## Transfer Error Pattern
+## 传输错误模式
 
-Background transfer execution has service-local error classification.
+后台传输执行具有 service-local 错误分类。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/service/TransferService.kt`
 
-Current transfer types:
+当前传输类型：
 
 - `TransferErrorType`
 - `TransferException`
 
-The service classifies network and timeout errors for retry behavior, while file/auth/unknown errors are handled separately. Keep transfer retry logic near `TransferService` unless a task explicitly asks to extract it.
+service 会为了重试行为分类网络和超时错误，而文件/auth/unknown 错误单独处理。除非任务明确要求抽取，否则将传输重试逻辑保留在 `TransferService` 附近。
 
 ---
 
-## Boundaries
+## 边界
 
-- Do not expose raw exception text directly to users when an existing string resource fallback is available.
-- Do not handle long-running or blocking work in Composables.
-- Do not add HTTP/API error response rules; this app does not contain an HTTP API server.
-- Do not replace the current `Result<T>` use case pattern with a different error abstraction unless a task explicitly asks for it.
+- 当已有 string resource 兜底消息可用时，不要直接向用户暴露原始 exception 文本。
+- 不要在 Composable 中处理长时间运行或阻塞式工作。
+- 不要添加 HTTP/API 错误响应规则；本应用不包含 HTTP API server。
+- 除非任务明确要求，否则不要用其他错误抽象替换当前 `Result<T>` use case 模式。

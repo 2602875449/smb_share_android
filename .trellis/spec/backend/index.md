@@ -1,39 +1,39 @@
-# Backend Development Guidelines
+# Backend 开发规范
 
-> Project-specific guidelines for the Android app's data, domain, service, persistence, and non-UI business logic layers.
-
----
-
-## Overview
-
-This repository does not contain a server backend. The files in this directory document the existing Android app patterns that future agents should follow when changing data, domain, service, persistence, and related UI-facing logic.
+> 本项目 Android 应用的数据、领域、服务、持久化和非 UI 业务逻辑层规范。
 
 ---
 
-## Guidelines Index
+## 概览
 
-| Guide | Description | Status |
+本仓库不包含服务端后端。本目录中的文件记录的是当前 Android 应用已有的模式，后续 agent 在修改数据、领域、服务、持久化以及面向 UI 的相关逻辑时应遵循这些模式。
+
+---
+
+## 规范索引
+
+| 规范 | 说明 | 状态 |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Android module organization and layer boundaries | Filled |
-| [Database Guidelines](./database-guidelines.md) | Room, DataStore, serialization, and persistence tests | Filled |
-| [Error Handling](./error-handling.md) | App error categories, Result propagation, UI display | Filled |
-| [Quality Guidelines](./quality-guidelines.md) | Kotlin, Compose, theme, localization, and testing patterns | Filled |
-| [Logging Guidelines](./logging-guidelines.md) | Android Log usage, tags, levels, and sensitive data boundaries | Filled |
+| [Directory Structure](./directory-structure.md) | Android 模块组织和层边界 | 已填充 |
+| [Database Guidelines](./database-guidelines.md) | Room、DataStore、序列化和持久化测试 | 已填充 |
+| [Error Handling](./error-handling.md) | 应用错误分类、Result 传递、UI 展示 | 已填充 |
+| [Quality Guidelines](./quality-guidelines.md) | Kotlin、Compose、主题、本地化和测试模式 | 已填充 |
+| [Logging Guidelines](./logging-guidelines.md) | Android Log 用法、tag、级别和敏感数据边界 | 已填充 |
 
 ---
 
-## Pre-Development Checklist
+## 开发前检查清单
 
-Before coding in this repository, read the relevant files below:
+在本仓库编码前，先阅读下面的相关文件：
 
-- For structure, state ownership, or package placement: [Directory Structure](./directory-structure.md)
-- For Room, DataStore, entity conversion, or serialization: [Database Guidelines](./database-guidelines.md)
-- For exception mapping, Result propagation, Snackbar errors, or transfer retries: [Error Handling](./error-handling.md)
-- For logs, tags, levels, or sensitive data: [Logging Guidelines](./logging-guidelines.md)
-- For Compose state, theme colors, localization, tests, or verification commands: [Quality Guidelines](./quality-guidelines.md)
+- 涉及结构、状态归属或包位置时：阅读 [Directory Structure](./directory-structure.md)
+- 涉及 Room、DataStore、entity 转换或序列化时：阅读 [Database Guidelines](./database-guidelines.md)
+- 涉及异常映射、Result 传递、Snackbar 错误或传输重试时：阅读 [Error Handling](./error-handling.md)
+- 涉及日志、tag、级别或敏感数据时：阅读 [Logging Guidelines](./logging-guidelines.md)
+- 涉及 Compose 状态、主题颜色、本地化、测试或验证命令时：阅读 [Quality Guidelines](./quality-guidelines.md)
 
-These guidelines intentionally describe current code examples only. Do not treat them as permission to refactor app architecture or add unsupported frameworks.
+这些规范只描述当前代码示例已经支持的模式。不要把它们理解为可以重构应用架构或添加不受支持框架的许可。
 
 ---
 
-**Language**: All documentation should be written in **English**.
+**语言**：所有文档应使用**简体中文**编写。

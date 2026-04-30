@@ -1,6 +1,7 @@
 package com.qi.smbshare.ui.connection
 
 import com.qi.smbshare.data.model.SMBConfig
+import com.qi.smbshare.data.model.SmbDiscoveryHost
 
 data class ConnectionState(
     val savedConfigs: List<SMBConfig> = emptyList(),
@@ -9,6 +10,11 @@ data class ConnectionState(
     val isLoading: Boolean = false,
     val isConnecting: Boolean = false,
     val isTesting: Boolean = false,
+    val isDiscovering: Boolean = false,
+    val hasDiscoveryStarted: Boolean = false,
+    val manualDiscoveryTarget: String = "",
+    val discoveredHosts: List<SmbDiscoveryHost> = emptyList(),
+    val discoveryError: String? = null,
     val error: String? = null,
     val testResult: String? = null,
     val navigateToFileList: SMBConfig? = null, // 导航到文件列表
@@ -22,4 +28,3 @@ data class ConnectionState(
     val formUsername: String get() = currentConfig?.username ?: ""
     val formPassword: String get() = currentConfig?.password ?: ""
 }
-

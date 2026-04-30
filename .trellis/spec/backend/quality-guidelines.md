@@ -1,25 +1,25 @@
-# Quality Guidelines
+# 质量规范
 
-> Current code quality, UI, and test expectations for this Android/Kotlin app.
+> 当前 Android/Kotlin 应用的代码质量、UI 和测试期望。
 
 ---
 
-## General Kotlin Style
+## 通用 Kotlin 风格
 
-Use Kotlin official style with 4-space indentation, camelCase names, and immutable values where practical.
+使用 Kotlin 官方风格：4 空格缩进、camelCase 命名，并在可行时优先使用不可变值。
 
-Keep business logic out of Composables. Existing feature logic lives in ViewModels, repositories, use cases, services, and utilities.
+不要把业务逻辑放进 Composable。现有功能逻辑位于 ViewModel、repository、use case、service 和 utility 中。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionViewModel.kt`
 - `app/src/main/java/com/qi/smbshare/data/repository/TransferRepository.kt`
 - `app/src/main/java/com/qi/smbshare/domain/usecase/ConnectSMBUseCase.kt`
 - `app/src/main/java/com/qi/smbshare/service/TransferService.kt`
 
-Add short Chinese comments only when they explain why a non-obvious choice exists.
+只有在需要解释某个不明显选择为什么存在时，才添加简短中文注释。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/util/ErrorHandler.kt`
 - `app/src/main/java/com/qi/smbshare/ui/filelist/FileListViewModel.kt`
@@ -27,17 +27,17 @@ Examples:
 
 ---
 
-## Compose And State Quality
+## Compose 与 State 质量
 
-Current UI state pattern:
+当前 UI state 模式：
 
-- ViewModels expose public `StateFlow` from private `MutableStateFlow`.
-- Screens use `collectAsStateWithLifecycle()`.
-- User actions flow through feature-specific sealed intents.
-- One-off UI effects are stored in state, consumed in `LaunchedEffect`, and cleared through intents.
-- Screens preserve empty, loading, and error states when feature behavior changes.
+- ViewModel 从私有 `MutableStateFlow` 暴露公开 `StateFlow`。
+- Screen 使用 `collectAsStateWithLifecycle()`。
+- 用户动作通过 feature-specific sealed intent 流转。
+- 一次性 UI effect 存储在 state 中，在 `LaunchedEffect` 中消费，并通过 intent 清除。
+- 功能行为变化时，screen 保留空数据、加载中和错误状态。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionViewModel.kt`
 - `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionScreen.kt`
@@ -46,72 +46,72 @@ Examples:
 - `app/src/main/java/com/qi/smbshare/ui/transfer/TransferManagerViewModel.kt`
 - `app/src/main/java/com/qi/smbshare/ui/transfer/TransferManagerScreen.kt`
 
-Do not run blocking SMB, network, or disk work directly from Composables. Existing code uses `viewModelScope`, services, repositories, and `Dispatchers.IO` for that work.
+不要直接从 Composable 执行阻塞式 SMB、网络或磁盘工作。现有代码使用 `viewModelScope`、service、repository 和 `Dispatchers.IO` 执行这些工作。
 
 ---
 
-## Theme And UI Colors
+## 主题与 UI 颜色
 
-The app uses Jetpack Compose Material3.
+应用使用 Jetpack Compose Material3。
 
-Theme colors are centralized in:
+主题颜色集中在：
 
 - `app/src/main/java/com/qi/smbshare/ui/theme/Color.kt`
 - `app/src/main/java/com/qi/smbshare/ui/theme/Theme.kt`
 
-Component UI should mainly reference:
+组件 UI 应主要引用：
 
 - `MaterialTheme.colorScheme`
 - `MaterialTheme.typography`
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/MainActivity.kt`
 - `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionScreen.kt`
 - `app/src/main/java/com/qi/smbshare/ui/components/ErrorSnackbar.kt`
 
-Do not add component-level hard-coded `Color(0xFF...)` values. Direct color definitions belong in the theme layer. Existing component use of framework constants such as `Color.Transparent` should be treated as local precedent, not as permission to introduce arbitrary hex colors.
+不要添加组件级硬编码 `Color(0xFF...)` 值。直接颜色定义属于主题层。现有组件使用 `Color.Transparent` 等框架常量应视为本地先例，而不是引入任意 hex 颜色的许可。
 
-Dangerous actions use `MaterialTheme.colorScheme.error` or error containers.
+危险操作使用 `MaterialTheme.colorScheme.error` 或 error container。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/ui/components/ErrorSnackbar.kt`
-- delete-related UI in `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionScreen.kt`
-- delete-related UI in `app/src/main/java/com/qi/smbshare/ui/filelist/FileListScreen.kt`
+- `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionScreen.kt` 中的删除相关 UI
+- `app/src/main/java/com/qi/smbshare/ui/filelist/FileListScreen.kt` 中的删除相关 UI
 
-Spacing in existing screens mostly uses nearby local values such as `8.dp`, `16.dp`, and other established Material sizes. Follow the local screen style instead of introducing unrelated dimensions.
+现有 screen 中的间距大多使用附近已有本地值，例如 `8.dp`、`16.dp` 和其他既有 Material 尺寸。沿用本地 screen 风格，不要引入无关尺寸。
 
 ---
 
-## Strings And Localization
+## 字符串与本地化
 
-User-visible text should use string resources when adding or changing UI text.
+新增或修改 UI 文案时，面向用户的文本应使用 string resource。
 
-Examples:
+示例：
 
 - `app/src/main/res/values/strings.xml`
 - `app/src/main/res/values-zh/strings.xml`
 - `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionScreen.kt`
 - `app/src/main/java/com/qi/smbshare/MainActivity.kt`
 
-New user-facing Chinese text should be Simplified Chinese. Logs and explanatory code comments in existing Kotlin files are also Simplified Chinese.
+新增面向用户的中文文本应使用简体中文。现有 Kotlin 文件中的日志和解释性代码注释也使用简体中文。
 
 ---
 
-## Testing
+## 测试
 
-Unit tests live under:
+单元测试位于：
 
 - `app/src/test/java/com/qi/smbshare`
 
-Instrumentation tests live under:
+Instrumentation 测试位于：
 
 - `app/src/androidTest/java/com/qi/smbshare`
 
-Current test stack includes JUnit4, coroutine `runTest`, MockK, Robolectric, AndroidX test core, and in-memory Room.
+当前测试栈包括 JUnit4、coroutine `runTest`、MockK、Robolectric、AndroidX test core 和 in-memory Room。
 
-Examples:
+示例：
 
 - `app/src/test/java/com/qi/smbshare/util/ErrorHandlerTest.kt`
 - `app/src/test/java/com/qi/smbshare/util/ConfigSerializerTest.kt`
@@ -121,29 +121,29 @@ Examples:
 - `app/src/test/java/com/qi/smbshare/ui/filelist/FileListStateTest.kt`
 - `app/src/androidTest/java/com/qi/smbshare/util/PermissionManagerTest.kt`
 
-For Room persistence changes, follow the in-memory database pattern in `TransferRepositoryTest` and close the database in teardown.
+对于 Room 持久化变更，遵循 `TransferRepositoryTest` 中的 in-memory database 模式，并在 teardown 中关闭数据库。
 
-For repository/service intent behavior, `TransferRepositoryTest.TestApplication` records started foreground service intents.
+对于 repository/service intent 行为，`TransferRepositoryTest.TestApplication` 会记录已启动的 foreground service intent。
 
 ---
 
-## Supported Verification Commands
+## 支持的验证命令
 
-The project currently supports:
+项目当前支持：
 
 ```bash
 ./gradlew test
 ./gradlew assembleDebug
 ```
 
-For documentation-only changes, read-only checks such as `rg` are often enough. Do not change app source, Gradle files, or generated files for documentation-only tasks.
+对于 documentation-only 变更，`rg` 等只读检查通常足够。documentation-only 任务不要修改 app 源码、Gradle 文件或生成文件。
 
 ---
 
-## Boundaries
+## 边界
 
-- Do not introduce new third-party UI libraries unless a task explicitly asks for them.
-- Do not introduce a dependency injection framework as part of routine changes; current code manually wires dependencies and ViewModel factories.
-- Do not do broad architectural cleanup while implementing narrow feature or documentation tasks.
-- Do not replace existing Compose Material3 patterns with another UI system.
-- Do not add unsupported server/backend quality rules; this repository is an Android app.
+- 除非任务明确要求，否则不要引入新的第三方 UI 库。
+- 不要在常规变更中引入依赖注入框架；当前代码手动连接依赖和 ViewModel factory。
+- 实现狭窄功能或 documentation 任务时，不要进行大范围架构清理。
+- 不要用其他 UI system 替换现有 Compose Material3 模式。
+- 不要添加不受支持的服务端/backend 质量规则；本仓库是 Android 应用。

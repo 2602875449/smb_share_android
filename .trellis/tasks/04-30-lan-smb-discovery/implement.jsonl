@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "入口索引，说明 Android 数据/领域/服务/非 UI 业务逻辑层规范。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增 discovery 数据层、用例和 UI 状态时需要遵守包结构与层边界。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "扫描失败、网络不可用和 UI 错误提示需要遵守统一错误处理模式。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "网络发现会产生诊断日志，需要遵守日志等级、tag 和敏感信息边界。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Compose 状态、主题颜色、本地化、测试和验证命令的质量要求。"}
+{"file": ".trellis/tasks/04-30-lan-smb-discovery/research/android-smb-discovery.md", "reason": "Android mDNS、NetBIOS/NBT、权限和可测试抽象的研究结论。"}

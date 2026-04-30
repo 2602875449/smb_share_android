@@ -6,23 +6,40 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qi.smbshare.R
+import com.qi.smbshare.data.discovery.AndroidSmbHostDiscovery
+import com.qi.smbshare.data.discovery.SmbHostDiscovery
+import com.qi.smbshare.data.discovery.SmbDiscoveryTarget
+import com.qi.smbshare.data.discovery.SmbDiscoveryTargetParser
 import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.SMBConfig
+import com.qi.smbshare.data.model.SmbDiscoveryHost
 import com.qi.smbshare.data.repository.ConnectionRepository
 import com.qi.smbshare.domain.usecase.ConnectSMBUseCase
 import com.qi.smbshare.domain.usecase.DeleteConnectionUseCase
 import com.qi.smbshare.domain.usecase.SaveConnectionUseCase
 import com.qi.smbshare.util.ErrorHandler
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ConnectionViewModel(application: Application) : AndroidViewModel(application) {
+class ConnectionViewModel internal constructor(
+    application: Application,
+    private val smbHostDiscovery: SmbHostDiscovery,
+    private val ioDispatcher: CoroutineDispatcher
+) : AndroidViewModel(application) {
+    constructor(application: Application) : this(
+        application = application,
+        smbHostDiscovery = AndroidSmbHostDiscovery(application),
+        ioDispatcher = Dispatchers.IO
+    )
+
     private val TAG = "ConnectionViewModel"
     private val connectionManager = SMBConnectionManager()
     private val connectionRepository = ConnectionRepository(application)
@@ -30,6 +47,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     private val saveConnectionUseCase = SaveConnectionUseCase(connectionRepository)
     private val deleteConnectionUseCase = DeleteConnectionUseCase(connectionRepository)
     private var loadConnectionsJob: Job? = null
+    private var discoveryJob: Job? = null
 
     private val _state = MutableStateFlow(ConnectionState())
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -61,19 +79,45 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             is ConnectionIntent.ToggleAnonymous -> {
                 toggleAnonymous()
             }
+            is ConnectionIntent.StartDiscovery -> {
+                startDiscovery(target = null)
+            }
+            is ConnectionIntent.ProbeDiscoveryTarget -> {
+                startManualDiscoveryTarget()
+            }
+            is ConnectionIntent.UpdateDiscoveryTarget -> {
+                _state.value = _state.value.copy(manualDiscoveryTarget = intent.target)
+            }
+            is ConnectionIntent.StopDiscovery -> {
+                stopDiscovery()
+            }
+            is ConnectionIntent.SelectDiscoveredHost -> {
+                selectDiscoveredHost(intent.host)
+            }
+            is ConnectionIntent.ClearDiscoveryError -> {
+                _state.value = _state.value.copy(discoveryError = null)
+            }
             is ConnectionIntent.ClearError -> {
-                _state.value = _state.value.copy(error = null, testResult = null)
+                _state.value = _state.value.copy(error = null, testResult = null, discoveryError = null)
             }
             is ConnectionIntent.ClearForm -> {
+                stopDiscovery()
                 _state.value = _state.value.copy(
                     currentConfig = null,
-                    isAnonymous = false
+                    isAnonymous = false,
+                    hasDiscoveryStarted = false,
+                    discoveredHosts = emptyList(),
+                    discoveryError = null
                 )
             }
             is ConnectionIntent.EditConfig -> {
+                stopDiscovery()
                 _state.value = _state.value.copy(
                     currentConfig = intent.config,
-                    isAnonymous = intent.config.isAnonymous
+                    isAnonymous = intent.config.isAnonymous,
+                    hasDiscoveryStarted = false,
+                    discoveredHosts = emptyList(),
+                    discoveryError = null
                 )
             }
             is ConnectionIntent.NavigateToNewConnection -> {
@@ -155,7 +199,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             saveConnectionUseCase.execute(config)
                 .onSuccess {
                     // 然后执行连接
-                    withContext(Dispatchers.IO) {
+                    withContext(ioDispatcher) {
                         connectUseCase.execute(config)
                     }
                         .onSuccess {
@@ -195,7 +239,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             Log.d(TAG, "开始执行连接测试...")
             
             // 在IO线程执行网络操作
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 connectUseCase.testConnection(config)
             }
                 .onSuccess {
@@ -215,6 +259,75 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                     )
                 }
         }
+    }
+
+    private fun startDiscovery(target: SmbDiscoveryTarget?) {
+        if (discoveryJob?.isActive == true) {
+            return
+        }
+        discoveryJob = viewModelScope.launch {
+            _state.value = _state.value.copy(
+                isDiscovering = true,
+                hasDiscoveryStarted = true,
+                discoveredHosts = emptyList(),
+                discoveryError = null
+            )
+
+            val discoveryFlow = if (target == null) {
+                smbHostDiscovery.discover()
+            } else {
+                smbHostDiscovery.discover(target)
+            }
+
+            discoveryFlow
+                .catch { e ->
+                    Log.e(TAG, "局域网 SMB 主机扫描失败", e)
+                    _state.value = _state.value.copy(
+                        isDiscovering = false,
+                        discoveryError = text(R.string.error_discovery_failed)
+                    )
+                }
+                .onCompletion { cause ->
+                    if (cause == null) {
+                        _state.value = _state.value.copy(isDiscovering = false)
+                    }
+                }
+                .collect { hosts ->
+                    _state.value = _state.value.copy(discoveredHosts = hosts)
+                }
+        }
+    }
+
+    private fun startManualDiscoveryTarget() {
+        val targetText = _state.value.manualDiscoveryTarget
+        val target = SmbDiscoveryTargetParser.parse(targetText)
+            .getOrElse {
+                _state.value = _state.value.copy(discoveryError = text(R.string.error_discovery_target_invalid))
+                return
+            }
+        startDiscovery(target)
+    }
+
+    private fun stopDiscovery() {
+        discoveryJob?.cancel()
+        discoveryJob = null
+        _state.value = _state.value.copy(isDiscovering = false)
+    }
+
+    private fun selectDiscoveredHost(host: SmbDiscoveryHost) {
+        val current = _state.value.currentConfig
+        val nextName = current?.name?.takeIf { it.isNotBlank() } ?: host.displayName
+        val newConfig = current?.copy(
+            name = nextName,
+            serverAddress = host.address,
+            port = host.port
+        ) ?: SMBConfig(
+            name = nextName,
+            serverAddress = host.address,
+            port = host.port,
+            shareName = ""
+        )
+        _state.value = _state.value.copy(currentConfig = newConfig)
     }
 
     private fun updateFormField(field: FormField, value: String) {
@@ -273,6 +386,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
 
     override fun onCleared() {
         super.onCleared()
+        discoveryJob?.cancel()
         connectUseCase.disconnect()
     }
 }

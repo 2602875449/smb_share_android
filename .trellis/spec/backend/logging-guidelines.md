@@ -1,16 +1,16 @@
-# Logging Guidelines
+# 日志规范
 
-> Current logging conventions for this Android/Kotlin app.
+> 当前 Android/Kotlin 应用的日志约定。
 
 ---
 
-## Logging Library
+## 日志库
 
-The project uses platform `android.util.Log`.
+项目使用平台 `android.util.Log`。
 
-Do not introduce a new logging library as part of normal feature work.
+不要在常规功能工作中引入新的日志库。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/domain/usecase/ConnectSMBUseCase.kt`
 - `app/src/main/java/com/qi/smbshare/data/repository/SMBFileRepository.kt`
@@ -20,62 +20,62 @@ Examples:
 
 ---
 
-## Tags
+## Tag
 
-Current code commonly uses a class-name tag.
+当前代码通常使用类名作为 tag。
 
-Examples:
+示例：
 
-- file-level `private const val TAG = "ConnectSMBUseCase"` in `app/src/main/java/com/qi/smbshare/domain/usecase/ConnectSMBUseCase.kt`
-- file-level `private const val TAG = "SMBFileRepository"` in `app/src/main/java/com/qi/smbshare/data/repository/SMBFileRepository.kt`
-- companion object `private const val TAG = "TransferService"` in `app/src/main/java/com/qi/smbshare/service/TransferService.kt`
-- instance property `private val TAG = "ConnectionViewModel"` in `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionViewModel.kt`
+- `app/src/main/java/com/qi/smbshare/domain/usecase/ConnectSMBUseCase.kt` 中的 file-level `private const val TAG = "ConnectSMBUseCase"`
+- `app/src/main/java/com/qi/smbshare/data/repository/SMBFileRepository.kt` 中的 file-level `private const val TAG = "SMBFileRepository"`
+- `app/src/main/java/com/qi/smbshare/service/TransferService.kt` 中的 companion object `private const val TAG = "TransferService"`
+- `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionViewModel.kt` 中的 instance property `private val TAG = "ConnectionViewModel"`
 
-Prefer the local style of the file being changed.
-
----
-
-## Message Language
-
-Existing logs are written in Simplified Chinese.
-
-Examples:
-
-- `ConnectSMBUseCase` logs connection start, success, and failures.
-- `SMBFileRepository` logs file listing/opening/upload operations and failure details.
-- `TransferService` logs service lifecycle and transfer intent actions.
-
-New logs should follow the same Chinese message style when touching these areas.
+优先沿用正在修改文件的本地风格。
 
 ---
 
-## Levels
+## 消息语言
 
-Current usage:
+现有日志使用简体中文。
 
-- `Log.d` for operation start, operation success, lifecycle events, parsed intent actions, paths, task IDs, and progress-related diagnostics.
-- `Log.w` for recoverable fallback paths, such as trying a second SMB directory-open strategy.
-- `Log.e` for operation failures, missing required parameters, parse failures, and caught exceptions.
+示例：
 
-Examples:
+- `ConnectSMBUseCase` 记录连接开始、成功和失败。
+- `SMBFileRepository` 记录文件列表、打开、上传操作和失败详情。
+- `TransferService` 记录 service 生命周期和传输 intent action。
+
+触碰这些区域时，新日志应遵循相同的中文消息风格。
+
+---
+
+## 级别
+
+当前用法：
+
+- `Log.d` 用于操作开始、操作成功、生命周期事件、已解析 intent action、路径、任务 ID 和进度相关诊断。
+- `Log.w` 用于可恢复兜底路径，例如尝试第二种 SMB 目录打开策略。
+- `Log.e` 用于操作失败、缺少必要参数、解析失败和捕获到的 exception。
+
+示例：
 
 - `app/src/main/java/com/qi/smbshare/data/repository/SMBFileRepository.kt`
 - `app/src/main/java/com/qi/smbshare/service/TransferService.kt`
 
 ---
 
-## What To Log
+## 记录什么
 
-Current code logs:
+当前代码记录：
 
-- SMB server address, port, share name, and anonymous flag when testing or connecting.
-- SMB paths used by file operations.
-- operation start/success/failure for connection, file, and transfer flows.
-- exception class and exception message for failed SMB file operations.
-- transfer task IDs and service actions.
-- config IDs where needed for repository/data operations.
+- 测试或连接时的 SMB server address、port、share name 和 anonymous flag。
+- 文件操作使用的 SMB 路径。
+- 连接、文件和传输流程的操作开始/成功/失败。
+- SMB 文件操作失败时的 exception class 和 exception message。
+- 传输 task ID 和 service action。
+- repository/data 操作需要的 config ID。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/ui/connection/ConnectionViewModel.kt`
 - `app/src/main/java/com/qi/smbshare/domain/usecase/ConnectSMBUseCase.kt`
@@ -84,22 +84,22 @@ Examples:
 
 ---
 
-## Sensitive Data
+## 敏感数据
 
-Do not log raw passwords or full serialized SMB config JSON.
+不要记录原始密码或完整序列化 SMB 配置 JSON。
 
-`SMBConnectionManager.testConnection` is the reference for masking secrets when logging connection test input.
+记录连接测试输入时，`SMBConnectionManager.testConnection` 是脱敏 secret 的参考。
 
-Example:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/data/local/SMBConnectionManager.kt`
 
-The current code does log some operational identifiers and paths. Keep that behavior consistent, but avoid adding new logs that expose credentials or complete config payloads.
+当前代码会记录一些操作标识符和路径。保持该行为一致，但避免添加会暴露凭据或完整配置载荷的新日志。
 
 ---
 
-## Boundaries
+## 边界
 
-- Do not add structured logging requirements; the project currently uses plain Android log messages.
-- Do not add a logging framework.
-- Do not add analytics/event tracking rules here; no analytics layer is present in this codebase.
+- 不要添加结构化日志要求；项目当前使用普通 Android log 消息。
+- 不要添加日志框架。
+- 不要在此添加分析或事件追踪规则；本代码库不存在 analytics 层。

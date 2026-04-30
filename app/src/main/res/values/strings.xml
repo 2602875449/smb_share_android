@@ -25,6 +25,19 @@
     <string name="btn_connect">Connect</string>
     <string name="msg_test_success">Connection test successful</string>
     <string name="msg_test_failed">Connection test failed: %1$s</string>
+    <string name="section_lan_discovery">LAN SMB hosts</string>
+    <string name="btn_scan_lan_smb_hosts">Scan LAN</string>
+    <string name="btn_probe_discovery_target">Probe Target</string>
+    <string name="btn_stop_scan">Stop</string>
+    <string name="label_discovery_manual_target">Target IP or CIDR</string>
+    <string name="hint_discovery_manual_target">192.168.1.55 or 192.168.1.0/24</string>
+    <string name="help_discovery_manual_target">Use this when the SMB host is reachable through a router but not on the phone subnet.</string>
+    <string name="discovery_scanning">Scanning</string>
+    <string name="discovery_empty">No available SMB hosts found. You can still enter the address manually.</string>
+    <string name="discovery_select_host">Use</string>
+    <string name="discovery_source_mdns">mDNS</string>
+    <string name="discovery_source_netbios">NetBIOS</string>
+    <string name="discovery_source_manual">Manual target</string>
     
     <!-- File List Screen -->
     <string name="title_file_list">File List</string>
@@ -214,6 +227,8 @@
     <string name="error_connect_failed">Unable to connect. Please try again later.</string>
     <string name="error_reconnect_failed">Unable to reconnect. Please try again later.</string>
     <string name="error_connection_test_failed">Connection test failed. Please try again later.</string>
+    <string name="error_discovery_failed">SMB host scan failed. You can still enter the address manually.</string>
+    <string name="error_discovery_target_invalid">Invalid target. Enter an IPv4 address or /24-/32 CIDR, such as 192.168.1.55 or 192.168.1.0/24.</string>
     <string name="error_load_file_list_failed">Unable to load the file list. Please try again later.</string>
     <string name="error_download_start_failed">Unable to create the download task. Please try again later.</string>
     <string name="error_upload_start_failed">Unable to create the upload task. Please try again later.</string>

@@ -1,18 +1,18 @@
-# Database Guidelines
+# 数据库规范
 
-> Current persistence patterns for this Android app. Document only the existing Room and DataStore usage; do not invent a server database layer.
+> 当前 Android 应用的持久化模式。只记录已有 Room 和 DataStore 用法；不要虚构服务端数据库层。
 
 ---
 
-## Persistence Technologies
+## 持久化技术
 
-The project currently uses:
+项目当前使用：
 
-- Room for transfer task persistence.
-- Android DataStore Preferences for SMB configs, last access state, app settings, theme mode, onboarding, and permission request flags.
-- `org.json` for SMB config serialization in DataStore and transfer task config payloads.
+- Room 用于传输任务持久化。
+- Android DataStore Preferences 用于 SMB 配置、最后访问状态、应用设置、主题模式、onboarding 和权限请求标记。
+- `org.json` 用于 DataStore 中的 SMB 配置序列化，以及传输任务配置载荷。
 
-Real examples:
+真实示例：
 
 - `app/src/main/java/com/qi/smbshare/data/local/TransferDatabase.kt`
 - `app/src/main/java/com/qi/smbshare/data/local/TransferTaskDao.kt`
@@ -24,44 +24,44 @@ Real examples:
 
 ---
 
-## Room Usage
+## Room 用法
 
-Room is currently used only for transfer tasks.
+Room 当前只用于传输任务。
 
 `TransferDatabase`:
 
-- declares `TransferTaskEntity` as its only entity.
-- uses database version `3`.
-- sets `exportSchema = false`.
-- exposes `transferTaskDao()`.
-- uses a singleton `getInstance(context)` with double-checked locking.
-- currently uses `.fallbackToDestructiveMigration(true)` with an inline comment that this is a development-stage choice.
+- 声明 `TransferTaskEntity` 作为唯一 entity。
+- 使用数据库版本 `3`。
+- 设置 `exportSchema = false`。
+- 暴露 `transferTaskDao()`。
+- 使用带 double-checked locking 的 singleton `getInstance(context)`。
+- 当前使用 `.fallbackToDestructiveMigration(true)`，并通过行内注释说明这是开发阶段选择。
 
-Example:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/data/local/TransferDatabase.kt`
 
-Do not document or add a separate migration framework. If a task changes the transfer task schema, update the Room version and keep migration behavior explicit in `TransferDatabase.kt`.
+不要记录或添加单独的 migration 框架。如果任务修改传输任务 schema，更新 Room 版本，并在 `TransferDatabase.kt` 中明确保留 migration 行为。
 
 ---
 
-## DAO Patterns
+## DAO 模式
 
-DAOs are interfaces under `data/local/`, annotated with `@Dao`.
+DAO 是 `data/local/` 下带 `@Dao` 注解的 interface。
 
-Current query style:
+当前查询风格：
 
-- observable lists and counts return `Flow`.
-- one-shot reads and writes are `suspend` functions.
-- SQL is written in `@Query` annotations.
-- inserts use `@Insert(onConflict = OnConflictStrategy.REPLACE)` where current behavior expects replacement.
-- batch deletes use `WHERE id IN (:taskIds)`.
+- 可观察列表和计数返回 `Flow`。
+- 一次性读写是 `suspend` 函数。
+- SQL 写在 `@Query` 注解中。
+- 当前行为期望替换时，insert 使用 `@Insert(onConflict = OnConflictStrategy.REPLACE)`。
+- 批量删除使用 `WHERE id IN (:taskIds)`。
 
-Example:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/data/local/TransferTaskDao.kt`
 
-Current DAO methods include:
+当前 DAO 方法包括：
 
 - `getAllTasks(): Flow<List<TransferTaskEntity>>`
 - `getActiveTasks(): Flow<List<TransferTaskEntity>>`
@@ -73,54 +73,54 @@ Current DAO methods include:
 
 ---
 
-## Entity And Model Conversion
+## Entity 与 Model 转换
 
-The transfer table is named `transfer_tasks`. The primary key is the task `id` string.
+传输表名为 `transfer_tasks`。主键是任务 `id` 字符串。
 
-`TransferTaskEntity` stores transfer type and status as enum names:
+`TransferTaskEntity` 将传输类型和状态保存为 enum name：
 
 - `type = type.name`
 - `status = status.name`
 
-Entity/model conversion lives beside the entity:
+Entity/model 转换与 entity 放在一起：
 
 - `TransferTask.toEntity()`
 - `TransferTaskEntity.toModel()`
 
-Example:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/data/local/TransferTaskEntity.kt`
 
-Indexes currently exist on:
+当前索引包括：
 
 - `status`
 - `type`
 - `created_at`
 
-Column naming is mixed in current code. `created_at` is snake_case because it is indexed and used in SQL ordering; fields such as `completedAt` and `lastUpdatedAt` remain camelCase. Preserve existing names unless a task is explicitly about schema cleanup.
+当前代码中的列命名存在混合风格。`created_at` 是 snake_case，因为它被索引并用于 SQL 排序；`completedAt` 和 `lastUpdatedAt` 等字段仍为 camelCase。除非任务明确涉及 schema 清理，否则保留现有名称。
 
 ---
 
-## DataStore Usage
+## DataStore 用法
 
-`DataStoreManager` owns DataStore preference access.
+`DataStoreManager` 负责 DataStore preference 访问。
 
-Current behavior:
+当前行为：
 
-- DataStore files are created under `context.noBackupFilesDir/datastore` through `SecurePreferenceDataStoreProvider`.
-- Sensitive SMB credentials are therefore excluded from system backup.
-- DataStores are cached by name in the provider.
-- SMB configs are stored as JSON arrays.
-- Invalid config JSON falls back to an empty list.
-- Invalid theme values fall back to `ThemeMode.SYSTEM`.
-- One-shot reads use `data.first()`.
-- Observable settings such as theme mode return `Flow`.
+- DataStore 文件通过 `SecurePreferenceDataStoreProvider` 创建在 `context.noBackupFilesDir/datastore` 下。
+- 因此，敏感 SMB 凭据会被排除在系统备份之外。
+- DataStore 在 provider 中按名称缓存。
+- SMB 配置保存为 JSON array。
+- 无效配置 JSON 回退为空列表。
+- 无效主题值回退为 `ThemeMode.SYSTEM`。
+- 一次性读取使用 `data.first()`。
+- 主题模式等可观察设置返回 `Flow`。
 
-Example:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/data/local/DataStoreManager.kt`
 
-Current preference areas:
+当前 preference 区域：
 
 - `smb_configs`
 - `last_access`
@@ -128,43 +128,43 @@ Current preference areas:
 
 ---
 
-## Repository Boundary
+## Repository 边界
 
-Repositories wrap persistence and service interaction. ViewModels should call use cases or repositories rather than accessing DAOs directly.
+Repository 包装持久化和 service 交互。ViewModel 应调用 use case 或 repository，而不是直接访问 DAO。
 
-Examples:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/data/repository/ConnectionRepository.kt`
 - `app/src/main/java/com/qi/smbshare/data/repository/TransferRepository.kt`
 
-`TransferRepository` accepts a `TransferTaskDao` constructor parameter with a default DAO from `TransferDatabase`. Tests use this to inject an in-memory Room DAO.
+`TransferRepository` 接受 `TransferTaskDao` 构造参数，并默认使用来自 `TransferDatabase` 的 DAO。测试使用这一点注入 in-memory Room DAO。
 
-Example:
+示例：
 
 - `app/src/main/java/com/qi/smbshare/data/repository/TransferRepository.kt`
 - `app/src/test/java/com/qi/smbshare/data/repository/TransferRepositoryTest.kt`
 
 ---
 
-## Testing Persistence
+## 持久化测试
 
-For Room-backed behavior, tests use in-memory Room and close the database in teardown.
+对于 Room 支持的行为，测试使用 in-memory Room，并在 teardown 中关闭数据库。
 
-Example:
+示例：
 
 - `app/src/test/java/com/qi/smbshare/data/repository/TransferRepositoryTest.kt`
 
-For serialization behavior, tests cover helper functions directly.
+对于序列化行为，测试直接覆盖辅助函数。
 
-Example:
+示例：
 
 - `app/src/test/java/com/qi/smbshare/util/ConfigSerializerTest.kt`
 
 ---
 
-## Boundaries
+## 边界
 
-- Do not add server database conventions; no server database exists in this repo.
-- Do not require a migration system that the codebase does not currently use.
-- Do not store new sensitive config values in default backed-up SharedPreferences.
-- Do not bypass existing model/entity conversion helpers when working with transfer tasks.
+- 不要添加服务端数据库约定；本仓库不存在服务端数据库。
+- 不要要求代码库当前没有使用的 migration 体系。
+- 不要把新的敏感配置值存储到默认会备份的 SharedPreferences 中。
+- 处理传输任务时不要绕过现有 model/entity 转换辅助函数。

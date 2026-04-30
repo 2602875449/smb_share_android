@@ -16,6 +16,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qi.smbshare.data.model.SMBConfig
+import com.qi.smbshare.data.model.SmbDiscoveryHost
+import com.qi.smbshare.data.model.SmbDiscoverySource
 import com.qi.smbshare.R
 import androidx.compose.ui.res.stringResource
 
@@ -31,6 +33,12 @@ fun EditConnectionScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    DisposableEffect(viewModel) {
+        onDispose {
+            viewModel.handleIntent(ConnectionIntent.StopDiscovery)
+        }
+    }
 
     // 处理系统返回键
     BackHandler(onBack = onBack)
@@ -48,6 +56,13 @@ fun EditConnectionScreen(
         state.error?.let { error ->
             snackbarHostState.showSnackbar(error)
             viewModel.handleIntent(ConnectionIntent.ClearError)
+        }
+    }
+
+    LaunchedEffect(state.discoveryError) {
+        state.discoveryError?.let { error ->
+            snackbarHostState.showSnackbar(error)
+            viewModel.handleIntent(ConnectionIntent.ClearDiscoveryError)
         }
     }
 
@@ -156,6 +171,19 @@ fun EditConnectionScreen(
                     },
                     label = { Text(stringResource(R.string.label_port)) },
                     singleLine = true
+                )
+
+                SmbDiscoverySection(
+                    state = state,
+                    onStart = { viewModel.handleIntent(ConnectionIntent.StartDiscovery) },
+                    onProbeTarget = { viewModel.handleIntent(ConnectionIntent.ProbeDiscoveryTarget) },
+                    onTargetChange = { target ->
+                        viewModel.handleIntent(ConnectionIntent.UpdateDiscoveryTarget(target))
+                    },
+                    onStop = { viewModel.handleIntent(ConnectionIntent.StopDiscovery) },
+                    onSelect = { host ->
+                        viewModel.handleIntent(ConnectionIntent.SelectDiscoveredHost(host))
+                    }
                 )
 
                 // 共享名称
@@ -285,6 +313,157 @@ fun EditConnectionScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SmbDiscoverySection(
+    state: ConnectionState,
+    onStart: () -> Unit,
+    onProbeTarget: () -> Unit,
+    onTargetChange: (String) -> Unit,
+    onStop: () -> Unit,
+    onSelect: (SmbDiscoveryHost) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = stringResource(R.string.section_lan_discovery),
+                style = MaterialTheme.typography.titleSmall
+            )
+            OutlinedButton(
+                onClick = if (state.isDiscovering) onStop else onStart
+            ) {
+                Icon(
+                    imageVector = if (state.isDiscovering) Icons.Default.Stop else Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (state.isDiscovering) {
+                        stringResource(R.string.btn_stop_scan)
+                    } else {
+                        stringResource(R.string.btn_scan_lan_smb_hosts)
+                    }
+                )
+            }
+        }
+
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = state.manualDiscoveryTarget,
+            onValueChange = onTargetChange,
+            label = { Text(stringResource(R.string.label_discovery_manual_target)) },
+            placeholder = { Text(stringResource(R.string.hint_discovery_manual_target)) },
+            supportingText = { Text(stringResource(R.string.help_discovery_manual_target)) },
+            singleLine = true,
+            enabled = !state.isDiscovering
+        )
+
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onProbeTarget,
+            enabled = !state.isDiscovering && state.manualDiscoveryTarget.isNotBlank()
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.btn_probe_discovery_target))
+        }
+
+        if (state.isDiscovering) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LinearProgressIndicator(modifier = Modifier.weight(1f))
+                Text(
+                    text = stringResource(R.string.discovery_scanning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (state.hasDiscoveryStarted && !state.isDiscovering && state.discoveredHosts.isEmpty()) {
+            Text(
+                text = stringResource(R.string.discovery_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        state.discoveredHosts.forEach { host ->
+            DiscoveredHostRow(host = host, onSelect = { onSelect(host) })
+        }
+    }
+}
+
+@Composable
+private fun DiscoveredHostRow(
+    host: SmbDiscoveryHost,
+    onSelect: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onSelect,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Storage,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = host.displayName,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Text(
+                    text = "${host.address}:${host.port} · ${host.discoverySourceLabel()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(onClick = onSelect) {
+                Text(stringResource(R.string.discovery_select_host))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmbDiscoveryHost.discoverySourceLabel(): String {
+    val mdnsLabel = stringResource(R.string.discovery_source_mdns)
+    val netBiosLabel = stringResource(R.string.discovery_source_netbios)
+    val manualLabel = stringResource(R.string.discovery_source_manual)
+    return sources.joinToString(" / ") { source ->
+        when (source) {
+            SmbDiscoverySource.MDNS -> mdnsLabel
+            SmbDiscoverySource.NETBIOS -> netBiosLabel
+            SmbDiscoverySource.MANUAL -> manualLabel
         }
     }
 }

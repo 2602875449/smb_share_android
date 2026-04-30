@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "检查本任务是否符合 Android 数据/领域/服务/非 UI 业务逻辑层规范入口。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "检查新增 discovery、ViewModel、测试文件的位置和层边界。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查扫描错误、Result/状态传递和 Snackbar 展示是否符合规范。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查新增日志是否避免敏感信息并使用合适等级。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 Kotlin、Compose、主题、本地化、测试和验证命令。"}
+{"file": ".trellis/tasks/04-30-lan-smb-discovery/research/android-smb-discovery.md", "reason": "检查实现是否符合 Android mDNS、NetBIOS/NBT 和测试抽象研究结论。"}
