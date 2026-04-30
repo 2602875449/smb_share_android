@@ -21,6 +21,24 @@ object FileTypeHelper {
     }
 
     /**
+     * 判断是否为纯文本文件（可在线预览）
+     */
+    fun isTextFile(fileName: String): Boolean {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        return extension in listOf(
+            "txt", "log", "md", "xml", "json", "csv",
+            "yaml", "yml", "ini", "conf", "properties",
+            "sh", "bat", "py", "js", "ts", "kt", "java",
+            "html", "htm", "css", "sql", "toml"
+        )
+    }
+
+    /**
+     * 判断文件是否支持应用内在线预览（图片或文本）
+     */
+    fun isPreviewable(fileName: String): Boolean = isImageFile(fileName) || isTextFile(fileName)
+
+    /**
      * 判断是否为文档文件
      */
     fun isDocumentFile(fileName: String): Boolean {

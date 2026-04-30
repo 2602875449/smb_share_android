@@ -26,4 +26,6 @@ sealed class FileListIntent {
     object HideRenameDialog : FileListIntent()
     data class ShowFileMenu(val filePath: String) : FileListIntent()
     object HideFileMenu : FileListIntent()
+    data class PreviewFile(val filePath: String, val fileName: String) : FileListIntent()
+    object ClosePreview : FileListIntent()
 }

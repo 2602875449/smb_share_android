@@ -2,6 +2,17 @@ package com.qi.smbshare.ui.filelist
 
 import com.qi.smbshare.data.model.FileItem
 
+/** 文件预览的加载状态 */
+sealed class PreviewState {
+    object Idle : PreviewState()
+    object Loading : PreviewState()
+    /** 图片预览：持有从 SMB 读取到的原始字节 */
+    data class ImageReady(val bytes: ByteArray) : PreviewState()
+    /** 文本预览：持有解码后的字符串内容，isTruncated 表示是否因超限而截断 */
+    data class TextReady(val content: String, val isTruncated: Boolean = false) : PreviewState()
+    data class Error(val message: String) : PreviewState()
+}
+
 data class FileListState(
     val files: List<FileItem> = emptyList(),
     val currentPath: String = "",
@@ -17,7 +28,9 @@ data class FileListState(
     val showRenameDialog: Boolean = false, // 显示重命名对话框
     val renameFilePath: String = "", // 要重命名的文件路径
     val renameCurrentName: String = "", // 当前文件名
-    val fileMenuPath: String? = null // 显示文件操作菜单的文件路径
+    val fileMenuPath: String? = null, // 显示文件操作菜单的文件路径
+    val previewFileName: String? = null, // 正在预览的文件名（非空表示预览页可见）
+    val previewState: PreviewState = PreviewState.Idle // 预览内容加载状态
 ) {
     val canGoBack: Boolean get() = pathHistory.isNotEmpty()
     val filteredFiles: List<FileItem> get() = 

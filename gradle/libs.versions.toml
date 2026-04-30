@@ -14,6 +14,7 @@ coroutines = "1.10.2"
 navigation-compose = "2.9.6"
 smbj = "0.14.0"
 room = "2.8.3"
+coil = "3.2.0"
 ksp = "2.3.2"
 mockk = "1.13.11"
 robolectric = "4.12.2"
@@ -51,6 +52,11 @@ navigation-compose = { group = "androidx.navigation", name = "navigation-compose
 
 # SMB
 smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
+
+# Coil（Compose 官方推荐图片加载库，支持异步/内存缓存/GIF）
+coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+coil-gif = { group = "io.coil-kt.coil3", name = "coil-gif", version.ref = "coil" }
+coil-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 
 # Room
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

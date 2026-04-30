@@ -131,6 +131,15 @@ class FileListViewModel(
             is FileListIntent.HideFileMenu -> {
                 _state.value = _state.value.copy(fileMenuPath = null)
             }
+            is FileListIntent.PreviewFile -> {
+                previewFile(intent.filePath, intent.fileName)
+            }
+            is FileListIntent.ClosePreview -> {
+                _state.value = _state.value.copy(
+                    previewFileName = null,
+                    previewState = PreviewState.Idle
+                )
+            }
         }
     }
 
@@ -504,6 +513,71 @@ class FileListViewModel(
                         isOperating = false,
                         error = errorMessage
                     )
+                }
+        }
+    }
+
+    /**
+     * 在线预览文件：从 SMB 流式读取字节，根据文件类型分发到图片/文本预览状态。
+     * 文本文件超过 1 MB 时截断读取，避免大文件 OOM。
+     */
+    private fun previewFile(filePath: String, fileName: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                previewFileName = fileName,
+                previewState = PreviewState.Loading,
+                fileMenuPath = null
+            )
+
+            ensureConnected()
+                .onFailure { e ->
+                    val msg = formatError(e, R.string.error_reconnect_failed)
+                    _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
+                    return@launch
+                }
+
+            val isImage = com.qi.smbshare.util.FileTypeHelper.isImageFile(fileName)
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val stream = fileRepository.getFileInputStream(filePath)
+                    stream.use { input ->
+                        if (isImage) {
+                            // 图片：全量读取（由 Coil 处理内存）
+                            input.readBytes()
+                        } else {
+                            // 文本：最多读取 1 MB，超出截断
+                            val maxBytes = 1 * 1024 * 1024
+                            val buffer = ByteArray(maxBytes + 1)
+                            var totalRead = 0
+                            var bytesRead: Int
+                            while (totalRead <= maxBytes) {
+                                bytesRead = input.read(buffer, totalRead, buffer.size - totalRead)
+                                if (bytesRead == -1) break
+                                totalRead += bytesRead
+                            }
+                            buffer.copyOf(totalRead.coerceAtMost(maxBytes + 1))
+                        }
+                    }
+                }
+            }
+
+            result
+                .onSuccess { bytes ->
+                    _state.value = if (isImage) {
+                        _state.value.copy(previewState = PreviewState.ImageReady(bytes))
+                    } else {
+                        val isTruncated = bytes.size > 1 * 1024 * 1024
+                        val content = bytes.take(1 * 1024 * 1024).toByteArray()
+                            .toString(Charsets.UTF_8)
+                        _state.value.copy(previewState = PreviewState.TextReady(content, isTruncated))
+                    }
+                }
+                .onFailure { e ->
+                    val msg = formatError(
+                        e as? Exception ?: RuntimeException(e),
+                        R.string.error_preview_failed
+                    )
+                    _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
                 }
         }
     }

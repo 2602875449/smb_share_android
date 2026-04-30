@@ -50,6 +50,7 @@
     <string name="empty_search_result">No matching files found</string>
     <string name="empty_folder">Folder is empty</string>
     <string name="action_download">Download</string>
+    <string name="action_preview">Preview</string>
     <string name="action_rename">Rename</string>
     <string name="action_delete">Delete</string>
     <string name="action_more_options">More options</string>
@@ -235,6 +236,10 @@
     <string name="error_create_folder_failed">Unable to create the folder. Please try again later.</string>
     <string name="error_delete_failed">Unable to delete. Please try again later.</string>
     <string name="error_rename_failed">Unable to rename. Please try again later.</string>
+    <string name="error_preview_failed">Unable to preview the file. Please try again later.</string>
+    <string name="preview_text_truncated">File is too large; only the first 1 MB is shown.</string>
+    <string name="preview_close">Close preview</string>
+    <string name="preview_loading">Loading preview…</string>
     <string name="error_pause_transfer_failed">Unable to pause. Please try again later.</string>
     <string name="error_resume_transfer_failed">Unable to resume. Please try again later.</string>
     <string name="error_cancel_transfer_failed">Unable to cancel. Please try again later.</string>

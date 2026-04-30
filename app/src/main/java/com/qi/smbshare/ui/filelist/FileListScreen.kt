@@ -254,6 +254,16 @@ fun FileListScreen(
         }
     }
 
+    // 预览页覆盖在文件列表之上（仿照 MainActivity 状态机模式）
+    if (state.previewFileName != null) {
+        FilePreviewScreen(
+            fileName = state.previewFileName!!,
+            previewState = state.previewState,
+            onClose = { viewModel.handleIntent(FileListIntent.ClosePreview) }
+        )
+        return
+    }
+
     // 处理系统返回键 - 如果有上级目录则返回上级目录，否则返回主页
     BackHandler {
         if (state.canGoBack) {
@@ -515,6 +525,11 @@ fun FileListScreen(
                                 onDownload = {
                                     checkPermissionAndDownload(file.path, file.name)
                                     viewModel.handleIntent(FileListIntent.HideFileMenu)
+                                },
+                                onPreview = {
+                                    viewModel.handleIntent(
+                                        FileListIntent.PreviewFile(file.path, file.name)
+                                    )
                                 },
                                 onDelete = {
                                     viewModel.handleIntent(FileListIntent.DeleteFile(file.path))
@@ -843,6 +858,7 @@ private fun FileItemRow(
     showMenu: Boolean = false,
     onMenuDismiss: () -> Unit = {},
     onDownload: () -> Unit = {},
+    onPreview: () -> Unit = {},
     onDelete: () -> Unit = {},
     onRename: () -> Unit = {}
 ) {
@@ -912,7 +928,7 @@ private fun FileItemRow(
                     onDismissRequest = onMenuDismiss,
                     containerColor = MaterialTheme.colorScheme.surface
                 ) {
-                    // 只有文件才显示下载选项
+                    // 只有文件才显示下载和预览选项
                     if (!file.isDirectory) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.action_download)) },
@@ -928,6 +944,23 @@ private fun FileItemRow(
                                 Icon(Icons.Default.Download, contentDescription = null)
                             }
                         )
+                        // 仅对可预览类型（图片/文本）显示预览入口
+                        if (com.qi.smbshare.util.FileTypeHelper.isPreviewable(file.name)) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_preview)) },
+                                colors = MenuDefaults.itemColors(
+                                    textColor = MaterialTheme.colorScheme.onSurface,
+                                    leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                onClick = {
+                                    onPreview()
+                                    onMenuDismiss()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Search, contentDescription = null)
+                                }
+                            )
+                        }
                     }
                     // 重命名选项（文件和目录都支持）
                     DropdownMenuItem(

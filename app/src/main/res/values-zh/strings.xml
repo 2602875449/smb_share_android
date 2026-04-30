@@ -50,6 +50,7 @@
     <string name="empty_search_result">未找到匹配的文件</string>
     <string name="empty_folder">文件夹为空</string>
     <string name="action_download">下载</string>
+    <string name="action_preview">预览</string>
     <string name="action_rename">重命名</string>
     <string name="action_delete">删除</string>
     <string name="action_more_options">更多操作</string>
@@ -232,6 +233,10 @@
     <string name="error_create_folder_failed">创建文件夹失败，请稍后重试</string>
     <string name="error_delete_failed">删除失败，请稍后重试</string>
     <string name="error_rename_failed">重命名失败，请稍后重试</string>
+    <string name="error_preview_failed">预览文件失败，请稍后重试</string>
+    <string name="preview_text_truncated">文件过大，仅显示前 1 MB 内容。</string>
+    <string name="preview_close">关闭预览</string>
+    <string name="preview_loading">加载预览中…</string>
     <string name="error_pause_transfer_failed">暂停失败，请稍后重试</string>
     <string name="error_resume_transfer_failed">恢复失败，请稍后重试</string>
     <string name="error_cancel_transfer_failed">取消失败，请稍后重试</string>

@@ -113,6 +113,10 @@ dependencies {
     // SMB
     implementation(libs.smbj)
     
+    // Coil（图片加载：异步、内存/磁盘缓存、GIF 支持）
+    implementation(libs.coil.compose)
+    implementation(libs.coil.gif)
+    
     // Room
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

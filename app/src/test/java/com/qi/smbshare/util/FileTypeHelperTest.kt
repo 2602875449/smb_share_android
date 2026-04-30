@@ -53,6 +53,46 @@ class FileTypeHelperTest {
     }
 
     @Test
+    fun `isTextFile 对常见文本扩展名返回 true`() {
+        listOf(
+            "readme.txt", "app.log", "notes.MD", "config.xml", "data.JSON",
+            "values.csv", "deploy.yaml", "settings.yml", "app.ini",
+            "server.conf", "gradle.properties", "run.sh", "start.bat",
+            "script.py", "index.js", "app.ts", "Main.kt", "Hello.java",
+            "page.html", "index.htm", "style.css", "query.sql", "config.toml"
+        ).forEach { name ->
+            assertTrue("$name 应被识别为文本文件", FileTypeHelper.isTextFile(name))
+        }
+    }
+
+    @Test
+    fun `isTextFile 对非文本文件返回 false`() {
+        assertFalse(FileTypeHelper.isTextFile("photo.jpg"))
+        assertFalse(FileTypeHelper.isTextFile("app.apk"))
+        assertFalse(FileTypeHelper.isTextFile("video.mp4"))
+        assertFalse(FileTypeHelper.isTextFile("archive.zip"))
+        assertFalse(FileTypeHelper.isTextFile("noextension"))
+    }
+
+    @Test
+    fun `isPreviewable 对图片和文本文件返回 true`() {
+        assertTrue(FileTypeHelper.isPreviewable("photo.jpg"))
+        assertTrue(FileTypeHelper.isPreviewable("photo.PNG"))
+        assertTrue(FileTypeHelper.isPreviewable("notes.txt"))
+        assertTrue(FileTypeHelper.isPreviewable("config.json"))
+        assertTrue(FileTypeHelper.isPreviewable("readme.MD"))
+    }
+
+    @Test
+    fun `isPreviewable 对视频、APK 等不可预览文件返回 false`() {
+        assertFalse(FileTypeHelper.isPreviewable("video.mp4"))
+        assertFalse(FileTypeHelper.isPreviewable("app.apk"))
+        assertFalse(FileTypeHelper.isPreviewable("archive.zip"))
+        assertFalse(FileTypeHelper.isPreviewable("document.pdf"))
+        assertFalse(FileTypeHelper.isPreviewable("word.docx"))
+    }
+
+    @Test
     fun `formatFileSize 小于 1KB 时显示字节`() {
         assertEquals("512 B", FileTypeHelper.formatFileSize(512))
         assertEquals("0 B", FileTypeHelper.formatFileSize(0))
