@@ -64,8 +64,83 @@ SMB repository 执行具体 SMB 操作，并在工作失败时抛出带中文操
 - 操作前将 SMB 路径规范化为反斜杠。
 - 记录失败操作、路径、exception 类型和 message。
 - 将非预期失败包装为 `IOException("<operation>失败: ${e.message}", e)`。
+- 打开 SMBJ `File` 后必须确保外层 `File` 句柄在成功、失败和取消路径都会关闭；只关闭 `file.inputStream` / `file.outputStream` 不应被视为足够。
+- 只读预览或下载类操作如果可能紧接删除/重命名，应在 `openFile` 的 share access 中包含 `FILE_SHARE_DELETE`，避免短暂读取窗口导致服务端返回 `STATUS_SHARING_VIOLATION`。
 
 保留现有 SMB 路径行为。常规功能工作中不要引入新的路径抽象。
+
+### 场景：SMB 预览流句柄释放
+
+#### 1. Scope / Trigger
+
+- Trigger: SMBJ 文件读取属于远端文件句柄集成；预览、下载后可能立即删除或重命名同一路径。
+
+#### 2. Signatures
+
+- `SMBFileRepository.getFileInputStream(filePath: String): InputStream`
+- 返回的 `InputStream.close()` 必须同时关闭底层输入流和 SMBJ `File` 句柄。
+
+#### 3. Contracts
+
+- 路径进入 `openFile` 前继续使用 `normalizePath()`。
+- 只读打开参数必须包含 `AccessMask.GENERIC_READ`。
+- share access 至少包含 `FILE_SHARE_READ`、`FILE_SHARE_WRITE`、`FILE_SHARE_DELETE`。
+
+#### 4. Validation & Error Matrix
+
+- `DiskShare` 不存在 -> 抛出 `IOException("未连接到SMB服务器")`。
+- `openFile` 失败 -> 包装为 `IOException("打开文件失败: ...", cause)`。
+- `file.inputStream` 创建失败 -> 关闭 SMBJ `File` 后再包装为 `IOException`。
+- 返回流关闭失败 -> 尽量关闭 SMBJ `File`，并保留原始关闭异常。
+
+#### 5. Good/Base/Bad Cases
+
+- Good: 预览图片 -> 返回 -> 删除同一文件，不应出现 `STATUS_SHARING_VIOLATION`。
+- Base: 读取普通文本/图片后关闭流，远端 `File.close()` 调用一次。
+- Bad: 只返回 `file.inputStream`，调用方 `use {}` 后远端句柄仍可能占用。
+
+#### 6. Tests Required
+
+- 单测断言返回流 `close()` 会调用 SMBJ `File.close()`。
+- 单测断言重复关闭不会重复关闭外层句柄。
+- 单测断言 `inputStream` 创建失败时仍关闭外层句柄。
+- 单测断言 `openFile` share access 包含 `FILE_SHARE_DELETE`。
+
+#### 7. Wrong vs Correct
+
+Wrong：
+
+```kotlin
+val file = diskShare.openFile(path, setOf(AccessMask.GENERIC_READ), null, shareAccess, null, null)
+return file.inputStream
+```
+
+Correct：
+
+```kotlin
+val file = diskShare.openFile(
+    path,
+    setOf(AccessMask.GENERIC_READ),
+    null,
+    setOf(
+        SMB2ShareAccess.FILE_SHARE_READ,
+        SMB2ShareAccess.FILE_SHARE_WRITE,
+        SMB2ShareAccess.FILE_SHARE_DELETE
+    ),
+    null,
+    null
+)
+
+return object : FilterInputStream(file.inputStream) {
+    override fun close() {
+        try {
+            super.close()
+        } finally {
+            file.close()
+        }
+    }
+}
+```
 
 ---
 

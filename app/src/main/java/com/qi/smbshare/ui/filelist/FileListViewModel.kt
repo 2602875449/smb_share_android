@@ -19,7 +19,9 @@ import com.qi.smbshare.domain.usecase.RenameFileUseCase
 import com.qi.smbshare.domain.usecase.UploadFileUseCase
 import com.qi.smbshare.util.ErrorHandler
 import com.qi.smbshare.util.StorageHelper
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +44,7 @@ class FileListViewModel(
     private val createFolderUseCase = CreateFolderUseCase(fileRepository)
     private val deleteFileUseCase = DeleteFileUseCase(fileRepository)
     private val renameFileUseCase = RenameFileUseCase(fileRepository)
+    private var previewJob: Job? = null
 
     private val initialBrowserPath = initialPath.trim('\\', '/')
     private val _state = MutableStateFlow(
@@ -135,6 +138,8 @@ class FileListViewModel(
                 previewFile(intent.filePath, intent.fileName)
             }
             is FileListIntent.ClosePreview -> {
+                previewJob?.cancel()
+                previewJob = null
                 _state.value = _state.value.copy(
                     previewFileName = null,
                     previewState = PreviewState.Idle
@@ -522,64 +527,77 @@ class FileListViewModel(
      * 文本文件超过 1 MB 时截断读取，避免大文件 OOM。
      */
     private fun previewFile(filePath: String, fileName: String) {
-        viewModelScope.launch {
-            _state.value = _state.value.copy(
-                previewFileName = fileName,
-                previewState = PreviewState.Loading,
-                fileMenuPath = null
-            )
+        previewJob?.cancel()
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            val activeJob = coroutineContext[Job]
+            try {
+                _state.value = _state.value.copy(
+                    previewFileName = fileName,
+                    previewState = PreviewState.Loading,
+                    fileMenuPath = null
+                )
 
-            ensureConnected()
-                .onFailure { e ->
-                    val msg = formatError(e, R.string.error_reconnect_failed)
-                    _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
-                    return@launch
-                }
+                ensureConnected()
+                    .onFailure { e ->
+                        if (previewJob !== activeJob) return@launch
+                        val msg = formatError(e, R.string.error_reconnect_failed)
+                        _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
+                        return@launch
+                    }
 
-            val isImage = com.qi.smbshare.util.FileTypeHelper.isImageFile(fileName)
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val stream = fileRepository.getFileInputStream(filePath)
-                    stream.use { input ->
-                        if (isImage) {
-                            // 图片：全量读取（由 Coil 处理内存）
-                            input.readBytes()
-                        } else {
-                            // 文本：最多读取 1 MB，超出截断
-                            val maxBytes = 1 * 1024 * 1024
-                            val buffer = ByteArray(maxBytes + 1)
-                            var totalRead = 0
-                            var bytesRead: Int
-                            while (totalRead <= maxBytes) {
-                                bytesRead = input.read(buffer, totalRead, buffer.size - totalRead)
-                                if (bytesRead == -1) break
-                                totalRead += bytesRead
+                val isImage = com.qi.smbshare.util.FileTypeHelper.isImageFile(fileName)
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val stream = fileRepository.getFileInputStream(filePath)
+                        stream.use { input ->
+                            if (isImage) {
+                                // 图片：全量读取（由 Coil 处理内存）
+                                input.readBytes()
+                            } else {
+                                // 文本：最多读取 1 MB，超出截断
+                                val maxBytes = 1 * 1024 * 1024
+                                val buffer = ByteArray(maxBytes + 1)
+                                var totalRead = 0
+                                var bytesRead: Int
+                                while (totalRead <= maxBytes) {
+                                    bytesRead = input.read(buffer, totalRead, buffer.size - totalRead)
+                                    if (bytesRead == -1) break
+                                    totalRead += bytesRead
+                                }
+                                buffer.copyOf(totalRead.coerceAtMost(maxBytes + 1))
                             }
-                            buffer.copyOf(totalRead.coerceAtMost(maxBytes + 1))
                         }
                     }
                 }
-            }
 
-            result
-                .onSuccess { bytes ->
-                    _state.value = if (isImage) {
-                        _state.value.copy(previewState = PreviewState.ImageReady(bytes))
-                    } else {
-                        val isTruncated = bytes.size > 1 * 1024 * 1024
-                        val content = bytes.take(1 * 1024 * 1024).toByteArray()
-                            .toString(Charsets.UTF_8)
-                        _state.value.copy(previewState = PreviewState.TextReady(content, isTruncated))
+                result
+                    .onSuccess { bytes ->
+                        if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onSuccess
+                        _state.value = if (isImage) {
+                            _state.value.copy(previewState = PreviewState.ImageReady(bytes))
+                        } else {
+                            val isTruncated = bytes.size > 1 * 1024 * 1024
+                            val content = bytes.take(1 * 1024 * 1024).toByteArray()
+                                .toString(Charsets.UTF_8)
+                            _state.value.copy(previewState = PreviewState.TextReady(content, isTruncated))
+                        }
                     }
+                    .onFailure { e ->
+                        if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onFailure
+                        val msg = formatError(
+                            e as? Exception ?: RuntimeException(e),
+                            R.string.error_preview_failed
+                        )
+                        _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
+                    }
+            } finally {
+                if (previewJob === activeJob) {
+                    previewJob = null
                 }
-                .onFailure { e ->
-                    val msg = formatError(
-                        e as? Exception ?: RuntimeException(e),
-                        R.string.error_preview_failed
-                    )
-                    _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
-                }
+            }
         }
+        previewJob = job
+        job.start()
     }
 
     private fun text(@StringRes resId: Int): String {
@@ -600,6 +618,8 @@ class FileListViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        previewJob?.cancel()
+        previewJob = null
         connectUseCase.disconnect()
     }
 }

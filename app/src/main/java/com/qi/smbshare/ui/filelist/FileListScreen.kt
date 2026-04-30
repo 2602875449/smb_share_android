@@ -256,6 +256,8 @@ fun FileListScreen(
 
     // 预览页覆盖在文件列表之上（仿照 MainActivity 状态机模式）
     if (state.previewFileName != null) {
+        // 必须在 return 之前注册，否则 BackHandler 不会生效，系统返回键会直接退出 App
+        BackHandler { viewModel.handleIntent(FileListIntent.ClosePreview) }
         FilePreviewScreen(
             fileName = state.previewFileName!!,
             previewState = state.previewState,

@@ -8,7 +8,9 @@ import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.smbj.share.File
 import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.FileItem
+import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.util.Date
 
 private const val TAG = "SMBFileRepository"
@@ -147,13 +149,17 @@ class SMBFileRepository(private val connectionManager: SMBConnectionManager) {
                 normalizedPath,
                 setOf(AccessMask.GENERIC_READ),
                 null,
-                setOf(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
+                setOf(
+                    SMB2ShareAccess.FILE_SHARE_READ,
+                    SMB2ShareAccess.FILE_SHARE_WRITE,
+                    SMB2ShareAccess.FILE_SHARE_DELETE
+                ),
                 null,
                 null
             )
 
             Log.d(TAG, "文件打开成功: $filePath")
-            return file.inputStream
+            return file.asClosingInputStream()
         } catch (e: Exception) {
             Log.e(TAG, "打开文件失败", e)
             Log.e(TAG, "文件路径: $filePath")
@@ -207,6 +213,48 @@ class SMBFileRepository(private val connectionManager: SMBConnectionManager) {
         // 避免类似 "." 这种形式，根目录返回空字符串
         if (p == "." || p == ".\\" || p == "./") return ""
         return p
+    }
+
+    private fun File.asClosingInputStream(): InputStream {
+        val input = try {
+            inputStream
+        } catch (e: Exception) {
+            closeQuietlyAfterOpenFailure()
+            throw e
+        }
+
+        // SMBJ 的 InputStream 不保证释放外层 File 句柄，预览读完后必须显式关闭远程句柄。
+        return object : FilterInputStream(input) {
+            private var closed = false
+
+            override fun close() {
+                if (closed) return
+                closed = true
+
+                var failure: Throwable? = null
+                try {
+                    super.close()
+                } catch (e: Throwable) {
+                    failure = e
+                }
+
+                try {
+                    this@asClosingInputStream.close()
+                } catch (e: Throwable) {
+                    failure?.addSuppressed(e) ?: throw e
+                }
+
+                failure?.let { throw it }
+            }
+        }
+    }
+
+    private fun File.closeQuietlyAfterOpenFailure() {
+        try {
+            close()
+        } catch (closeError: Exception) {
+            Log.w(TAG, "打开文件流失败后关闭 SMB 文件句柄出错: ${closeError.message}")
+        }
     }
 
     /**
@@ -402,4 +450,3 @@ class SMBFileRepository(private val connectionManager: SMBConnectionManager) {
         }
     }
 }
-
