@@ -137,3 +137,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: 架构与依赖注入改进
+
+**Date**: 2026-05-01
+**Task**: 架构与依赖注入改进
+**Branch**: `master`
+
+### Summary
+
+统一 TransferDatabase Hilt 入口与 Room 迁移，新增 Service 级 SMB 连接池，治理 TransferService 控制与并发状态，迁移导航状态到 SavedStateHandle 安全快照，并补充相关测试与规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0d9be7b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
