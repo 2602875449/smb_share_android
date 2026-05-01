@@ -3,7 +3,6 @@ package com.qi.smbshare
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -25,6 +24,7 @@ import com.qi.smbshare.ui.connection.ConnectionViewModel
 import com.qi.smbshare.ui.connection.EditConnectionScreen
 import com.qi.smbshare.ui.filelist.FileListScreen
 import com.qi.smbshare.ui.filelist.FileListViewModel
+import com.qi.smbshare.ui.filelist.FileListViewModelFactory
 import com.qi.smbshare.ui.components.PredictiveBackAnimatedContent
 import com.qi.smbshare.ui.settings.AboutScreen
 import com.qi.smbshare.ui.settings.PrivacyPolicyScreen
@@ -191,7 +191,7 @@ fun AppContent(onInstallApk: (File) -> Unit) {
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier
-                        .height(if (isChinese) 70.dp else 64.dp)
+                        .wrapContentHeight()
                         .shadow(
                             elevation = 8.dp,
                             shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
@@ -442,21 +442,6 @@ fun AppContent(onInstallApk: (File) -> Unit) {
     }
 }
 
-class FileListViewModelFactory(
-    private val application: android.app.Application,
-    private val config: SMBConfig,
-    private val initialPath: String = ""
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(FileListViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return FileListViewModel(application, config, initialPath) as T
-        }
-        Log.e(TAG, "创建ViewModel失败: 未知的ViewModel类 ${modelClass.simpleName}")
-        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.simpleName}")
-    }
-}
-
 /**
  * 带徽章和动画的图标组件
  * 支持徽章数量变化动画和活动任务时的脉冲动画
@@ -486,7 +471,7 @@ fun BadgedIcon(
         
         Icon(
             imageVector = icon,
-            contentDescription = "传输管理",
+            contentDescription = stringResource(R.string.nav_transfer_manager),
             modifier = Modifier.graphicsLayer {
                 scaleX = scale
                 scaleY = scale

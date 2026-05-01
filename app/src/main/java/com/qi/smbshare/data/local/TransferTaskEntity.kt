@@ -1,5 +1,6 @@
 package com.qi.smbshare.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -37,7 +38,8 @@ data class TransferTaskEntity(
     val estimatedTimeRemaining: Long = 0, // 预计剩余时间（毫秒）
     val errorMessage: String? = null,    // 错误信息
     val retryCount: Int = 0,             // 重试次数
-    val created_at: Long,                // 创建时间（用于索引）
+    @ColumnInfo(name = "created_at")
+    val createdAt: Long,                 // 创建时间（用于索引）
     val startedAt: Long? = null,         // 开始时间
     val completedAt: Long? = null,       // 完成时间
     val lastUpdatedAt: Long              // 最后更新时间
@@ -62,7 +64,7 @@ fun TransferTask.toEntity(): TransferTaskEntity {
         estimatedTimeRemaining = estimatedTimeRemaining,
         errorMessage = errorMessage,
         retryCount = retryCount,
-        created_at = createdAt,
+        createdAt = createdAt,
         startedAt = startedAt,
         completedAt = completedAt,
         lastUpdatedAt = lastUpdatedAt
@@ -89,7 +91,7 @@ fun TransferTaskEntity.toModel(): TransferTask {
         estimatedTimeRemaining = estimatedTimeRemaining,
         errorMessage = errorMessage,
         retryCount = retryCount,
-        createdAt = created_at,
+        createdAt = createdAt,
         startedAt = startedAt,
         completedAt = completedAt,
         lastUpdatedAt = lastUpdatedAt

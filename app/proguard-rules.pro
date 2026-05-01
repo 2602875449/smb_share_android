@@ -1,3 +1,10 @@
+# 在 Release 包中彻底移除 Debug/Verbose/Info 级别的 Android 日志，防止敏感信息泄露
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+}
+
 # Add project specific ProGuard rules here.
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.

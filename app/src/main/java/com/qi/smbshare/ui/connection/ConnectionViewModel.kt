@@ -228,7 +228,6 @@ class ConnectionViewModel internal constructor(
 
     private fun testConnection(config: SMBConfig) {
         Log.d(TAG, "收到测试连接请求")
-        Log.d(TAG, "配置信息: 服务器=${config.serverAddress}, 端口=${config.port}, 共享=${config.shareName}, 匿名=${config.isAnonymous}")
         
         viewModelScope.launch {
             _state.value = _state.value.copy(

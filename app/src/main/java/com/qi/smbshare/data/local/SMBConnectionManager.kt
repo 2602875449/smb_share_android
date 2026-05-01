@@ -1,6 +1,7 @@
 package com.qi.smbshare.data.local
 
 import android.util.Log
+import com.qi.smbshare.BuildConfig
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.smbj.connection.Connection
@@ -39,8 +40,8 @@ class SMBConnectionManager {
                 Log.d(TAG, "使用匿名登录（Guest 用户，空密码）")
                 AuthenticationContext("Guest", "".toCharArray(), null)
             } else {
-                // 用户名密码登录
-                Log.d(TAG, "使用用户名密码登录: ${config.username}")
+                // 用户名密码登录，仅在调试构建中打印用户名，避免生产日志泄露凭据
+                if (BuildConfig.DEBUG) Log.d(TAG, "使用用户名密码登录: ${config.username}")
                 AuthenticationContext(
                     config.username,
                     config.password.toCharArray(),
@@ -122,9 +123,9 @@ class SMBConnectionManager {
         Log.d(TAG, "端口: ${config.port}")
         Log.d(TAG, "共享名称: ${config.shareName}")
         Log.d(TAG, "匿名登录: ${config.isAnonymous}")
-        if (!config.isAnonymous) {
+        // 用户名/密码仅在调试构建中打印
+        if (BuildConfig.DEBUG && !config.isAnonymous) {
             Log.d(TAG, "用户名: ${config.username}")
-            Log.d(TAG, "密码: ${if (config.password.isNotEmpty()) "***" else "(空)"}")
         }
         
         var testShare: DiskShare? = null
@@ -133,51 +134,39 @@ class SMBConnectionManager {
         
         try {
             // 步骤1: 创建连接
-            Log.d(TAG, "[步骤1] 正在连接到服务器 ${config.serverAddress}:${config.port}...")
+            Log.d(TAG, "[步骤1] 正在连接到服务器...")
             testConnection = client.connect(config.serverAddress, config.port)
             Log.d(TAG, "[步骤1] ✓ 连接创建成功")
-            Log.d(TAG, "连接状态: ${testConnection.isConnected}")
-            Log.d(TAG, "远程主机名: ${testConnection.remoteHostname}")
-            val connectionContext = testConnection.connectionContext
-            if (connectionContext != null) {
-                val protocol = connectionContext.negotiatedProtocol
-                if (protocol != null) {
-                    Log.d(TAG, "协商协议: ${protocol.dialect}")
-                }
-            }
             
             // 步骤2: 创建认证上下文
             Log.d(TAG, "[步骤2] 正在创建认证上下文...")
             val authContext = if (config.isAnonymous) {
                 Log.d(TAG, "使用匿名认证（Guest 用户，空密码）")
-                // 大多数 SMB 服务器使用 Guest 用户来实现匿名访问
-                // 如果 Guest 失败，可能是服务器禁用了匿名访问
                 AuthenticationContext("Guest", "".toCharArray(), null)
             } else {
-                Log.d(TAG, "使用用户名密码认证: ${config.username}")
+                // 仅在调试构建中打印用户名，避免生产日志泄露凭据
+                if (BuildConfig.DEBUG) Log.d(TAG, "使用用户名密码认证: ${config.username}")
                 AuthenticationContext(
                     config.username,
                     config.password.toCharArray(),
-                    null // 域名，null表示使用默认
+                    null
                 )
             }
             Log.d(TAG, "[步骤2] ✓ 认证上下文创建成功")
             
-            // 步骤3: 建立会话
+            // 步骤3: 建立会话（不打印会话ID，避免敏感信息泄露）
             Log.d(TAG, "[步骤3] 正在建立会话...")
             testSession = testConnection.authenticate(authContext)
             Log.d(TAG, "[步骤3] ✓ 会话建立成功")
-            Log.d(TAG, "会话ID: ${testSession.sessionId}")
             
             // 步骤4: 连接共享文件夹
-            Log.d(TAG, "[步骤4] 正在连接共享文件夹: ${config.shareName}...")
+            Log.d(TAG, "[步骤4] 正在连接共享文件夹...")
             testShare = testSession.connectShare(config.shareName) as DiskShare
             Log.d(TAG, "[步骤4] ✓ 共享文件夹连接成功")
             
             // 步骤5: 检查连接状态
-            Log.d(TAG, "[步骤5] 正在检查连接状态...")
             val isConnected = testShare.isConnected
-            Log.d(TAG, "[步骤5] ✓ 连接状态检查完成: $isConnected")
+            Log.d(TAG, "[步骤5] ✓ 连接状态: $isConnected")
             
             if (isConnected) {
                 Log.d(TAG, "========== 连接测试成功 ==========")
