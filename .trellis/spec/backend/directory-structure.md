@@ -10,7 +10,7 @@
 
 添加行为时，保持现有应用架构：
 
-- `MainActivity.kt` 负责顶层 Compose 容器、导航、主题状态连接和 ViewModel factory 设置。
+- `MainActivity.kt` 负责顶层 Compose 容器、导航、主题状态连接和 Hilt 入口点设置。
 - `data/` 负责 model、本地持久化/SMB 基础能力和 repository。
 - `domain/usecase/` 负责面向动作的 use case，用来包装 repository 或本地操作。
 - `ui/<feature>/` 负责功能 screen、ViewModel、state 和 intent。
@@ -62,6 +62,80 @@
 - `app/src/main/java/com/qi/smbshare/data/repository/ConnectionRepository.kt`
 - `app/src/main/java/com/qi/smbshare/data/repository/SMBFileRepository.kt`
 - `app/src/main/java/com/qi/smbshare/data/repository/TransferRepository.kt`
+
+### 依赖注入
+
+Hilt 是当前生产代码的依赖注入入口。新增可共享依赖时，优先通过构造函数注入或 `di/` 下的 Hilt module 提供，不要在 Activity、Service、ViewModel 或 Composable 中重复创建 repository、DataStore、Room DAO 等应用级依赖。
+
+示例：
+
+- `app/src/main/java/com/qi/smbshare/SmbShareApplication.kt`
+- `app/src/main/java/com/qi/smbshare/di/AppModule.kt`
+- `app/src/main/java/com/qi/smbshare/di/SmbViewModelModule.kt`
+- `app/src/main/java/com/qi/smbshare/MainActivity.kt`
+- `app/src/main/java/com/qi/smbshare/service/TransferService.kt`
+
+#### 1. Scope / Trigger
+
+- Trigger：新增或修改跨页面/跨服务共享的 repository、manager、Room database/DAO、Android `Context` 依赖、ViewModel 构造依赖，或迁移 framework-created Android class（Activity、Service）依赖接线。
+- 目标：共享依赖在应用级或 ViewModel 级有明确生命周期，测试可以直接传入 fake/mock，不把业务依赖创建散落在 UI 或 service 生命周期方法里。
+
+#### 2. Signatures
+
+- Application：`class SmbShareApplication : Application()`，使用 `@HiltAndroidApp` 并在 Manifest 的 `<application android:name=".SmbShareApplication">` 注册。
+- Android 入口：Activity/Service 使用 `@AndroidEntryPoint`；Service 字段注入使用 `@Inject lateinit var dependency`，不要尝试构造函数注入 framework-created class。
+- 普通依赖：`class SomeRepository @Inject constructor(...)`。
+- Module：`@Module @InstallIn(SingletonComponent::class)` 提供应用级单例，`@InstallIn(ViewModelComponent::class)` 提供 ViewModel 生命周期内共享的 SMB 连接相关对象。
+- ViewModel：可直接注入的使用 `@HiltViewModel` + `@Inject constructor(...)`；需要运行时对象的使用 `@HiltViewModel(assistedFactory = ...)` + `@AssistedInject`。
+
+#### 3. Contracts
+
+- `DataStoreManager`、`TransferDatabase`、`TransferTaskDao`、`TransferRepository` 是应用级共享依赖，生产路径由 Hilt 提供。
+- `SMBConnectionManager` 属于单个 ViewModel 的连接状态，不要做成应用级单例；同一个 ViewModel 内的 `ConnectSMBUseCase` 与 `SMBFileRepository` 应共享同一个 manager。
+- `FileListViewModel` 的 `SMBConfig` 和 `initialPath` 保持导航运行时状态，不序列化进 route；通过 Hilt Assisted Injection 创建。
+- `TransferService` 继续暴露原有 Intent action/extras，调用方仍通过 `TransferRepository` 启动或控制服务。
+
+#### 4. Validation & Error Matrix
+
+- Hilt/KSP 配置不一致 -> 编译期失败；根工程应同时声明 Hilt 与 KSP 插件 `apply false`，app 模块再应用插件。
+- framework class 使用构造函数注入 -> Hilt 不能创建；改用 `@AndroidEntryPoint` 和字段注入。
+- ViewModel 运行时参数放入普通 `@Inject constructor` -> Hilt 无法解析；改用 Assisted Injection 或 `SavedStateHandle`。
+- SMB 连接 manager 提升为全局单例 -> 不同页面/配置可能共享连接状态；保持 ViewModel 作用域。
+
+#### 5. Good/Base/Bad Cases
+
+- Good：`TransferRepository @Inject constructor(@ApplicationContext context, dao)`，DAO 由 `AppModule` 从 `TransferDatabase` 提供。
+- Good：`FileListViewModel` 用 assisted factory 接收 `SMBConfig` 和 `initialPath`，导航层只调用 factory。
+- Base：纯工具对象没有状态且不需要替换时继续作为 `object` 或普通类使用。
+- Bad：在 `Composable`、`ViewModel` 或 `Service.onCreate()` 中直接 `DataStoreManager(context)`、`TransferRepository(context)`。
+- Bad：把 `SMBConfig` 转成导航 route 字符串只是为了满足 ViewModel 注入。
+
+#### 6. Tests Required
+
+- 构造函数注入变更后，受影响的 JVM 单测直接构造类并传入 fake/mock 依赖。
+- 修改 Hilt module、Application、Activity、Service 或 ViewModel 注入路径后，至少运行 `./gradlew :app:compileDebugKotlin`。
+- 修改 repository/DAO/DataStore 接线后，运行 `./gradlew :app:testDebugUnitTest`。
+- 修改 Manifest 或 Android 入口点后，运行 `./gradlew :app:lintDebug`。
+
+#### 7. Wrong vs Correct
+
+Wrong：
+
+```kotlin
+class TransferManagerViewModel(application: Application) : AndroidViewModel(application) {
+    private val transferRepository = TransferRepository(application)
+}
+```
+
+Correct：
+
+```kotlin
+@HiltViewModel
+class TransferManagerViewModel @Inject constructor(
+    application: Application,
+    private val transferRepository: TransferRepository
+) : AndroidViewModel(application)
+```
 
 ### 局域网发现与平台网络能力
 
@@ -190,7 +264,7 @@ viewModel.handleIntent(ConnectionIntent.StartDiscovery)
 - 上传/下载共用 `TransferStreamCopier` 的 256KB 缓冲区、每秒进度更新、速度计算、暂停/取消检查和协程 active 检查。
 - 下载执行器负责 `StorageHelper.createDownloadFileOutputStream()`、Android 10+ `finishDownloadFile()` 和本地路径更新。
 - 上传执行器负责普通路径与 `content://` URI 输入流打开，不先复制到缓存目录。
-- 执行器依赖通过构造函数手动传入；不要为了传输拆分引入 Hilt 或迁移导航。
+- 执行器依赖通过构造函数传入；不要为了传输拆分迁移导航或改变 Hilt 接线范围。
 
 #### 4. Validation & Error Matrix
 
@@ -298,6 +372,6 @@ Screen 使用 `collectAsStateWithLifecycle()` 收集 state。
 ## 边界
 
 - 不要在 Composable 中直接执行阻塞式 SMB、磁盘或网络工作。
-- 不要在常规功能工作中把现有手动依赖构造迁移到依赖注入框架；本项目当前手动构造依赖。
+- 不要在常规功能工作中更换依赖注入框架；当前生产代码使用 Hilt，新增共享依赖应沿用现有 module 和构造函数注入模式。
 - 不要引入 Android 应用中不存在的服务端/backend 概念。
 - 除非任务明确要求，否则不要进行大范围 package 重构。

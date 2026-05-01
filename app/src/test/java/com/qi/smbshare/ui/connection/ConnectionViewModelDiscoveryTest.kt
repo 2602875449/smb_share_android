@@ -4,13 +4,23 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.qi.smbshare.data.discovery.SmbHostDiscovery
 import com.qi.smbshare.data.discovery.SmbDiscoveryTarget
+import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.model.SmbDiscoveryHost
 import com.qi.smbshare.data.model.SmbDiscoverySource
+import com.qi.smbshare.data.repository.ConnectionRepository
+import com.qi.smbshare.domain.usecase.ConnectSMBUseCase
+import com.qi.smbshare.domain.usecase.DeleteConnectionUseCase
+import com.qi.smbshare.domain.usecase.SaveConnectionUseCase
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
 import java.io.IOException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onCompletion
@@ -23,6 +33,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -179,12 +190,63 @@ class ConnectionViewModelDiscoveryTest {
         assertEquals(0, discovery.targetDiscoverCount)
     }
 
-    private fun buildViewModel(discovery: SmbHostDiscovery): ConnectionViewModel {
+    @Test
+    fun `LoadConnections 恢复最后访问状态清除后不会重复恢复`() = runTest(dispatcher) {
+        val config = SMBConfig(
+            id = "restore-once",
+            name = "Office NAS",
+            serverAddress = "192.168.1.30",
+            shareName = "docs"
+        )
+        val savedConfigs = MutableStateFlow(listOf(config))
+        val connectionRepository = buildConnectionRepository(
+            savedConfigs = savedConfigs,
+            lastAccess = config.id to "projects"
+        )
+
+        val viewModel = buildViewModel(
+            discovery = FakeDiscovery(flowOf(emptyList())),
+            connectionRepository = connectionRepository
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            RestoredLastAccess(config = config, path = "projects"),
+            viewModel.state.value.restoredLastAccess
+        )
+
+        viewModel.handleIntent(ConnectionIntent.ClearRestoredLastAccess)
+        savedConfigs.value = listOf(config.copy(name = "Office NAS Updated"))
+        advanceUntilIdle()
+
+        assertNull(viewModel.state.value.restoredLastAccess)
+        coVerify(exactly = 1) { connectionRepository.getLastAccess() }
+    }
+
+    private fun buildViewModel(
+        discovery: SmbHostDiscovery,
+        connectionRepository: ConnectionRepository = buildConnectionRepository()
+    ): ConnectionViewModel {
+        val connectionManager = SMBConnectionManager()
         return ConnectionViewModel(
             application = application,
             smbHostDiscovery = discovery,
-            ioDispatcher = dispatcher
+            ioDispatcher = dispatcher,
+            connectionRepository = connectionRepository,
+            connectUseCase = ConnectSMBUseCase(connectionManager),
+            saveConnectionUseCase = SaveConnectionUseCase(connectionRepository),
+            deleteConnectionUseCase = DeleteConnectionUseCase(connectionRepository)
         )
+    }
+
+    private fun buildConnectionRepository(
+        savedConfigs: Flow<List<SMBConfig>> = flowOf(emptyList()),
+        lastAccess: Pair<String?, String?> = null to null
+    ): ConnectionRepository {
+        val repository = mockk<ConnectionRepository>(relaxed = true)
+        every { repository.getSavedConfigs() } returns savedConfigs
+        coEvery { repository.getLastAccess() } returns lastAccess
+        return repository
     }
 
     private class FakeDiscovery(

@@ -305,7 +305,7 @@ Instrumentation 测试位于：
 ## 边界
 
 - 除非任务明确要求，否则不要引入新的第三方 UI 库。
-- 不要在常规变更中引入依赖注入框架；当前代码手动连接依赖和 ViewModel factory。
+- 不要在常规变更中引入新的依赖注入框架；当前代码使用 Hilt，新增 ViewModel、Activity、Service 和共享 repository 依赖应沿用现有注入方式。
 - 实现狭窄功能或 documentation 任务时，不要进行大范围架构清理。
 - 不要用其他 UI system 替换现有 Compose Material3 模式。
 - 不要添加不受支持的服务端/backend 质量规则；本仓库是 Android 应用。

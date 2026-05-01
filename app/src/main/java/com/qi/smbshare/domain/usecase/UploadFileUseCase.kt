@@ -4,10 +4,11 @@ import android.util.Log
 import com.qi.smbshare.data.repository.SMBFileRepository
 import java.io.File
 import java.io.IOException
+import javax.inject.Inject
 
 private const val TAG = "UploadFileUseCase"
 
-class UploadFileUseCase(
+class UploadFileUseCase @Inject constructor(
     private val fileRepository: SMBFileRepository
 ) {
     suspend fun execute(
@@ -33,4 +34,3 @@ class UploadFileUseCase(
         }
     }
 }
-

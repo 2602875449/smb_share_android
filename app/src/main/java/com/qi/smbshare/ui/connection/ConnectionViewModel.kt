@@ -6,20 +6,19 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qi.smbshare.R
-import com.qi.smbshare.data.discovery.AndroidSmbHostDiscovery
 import com.qi.smbshare.data.discovery.SmbHostDiscovery
 import com.qi.smbshare.data.discovery.SmbDiscoveryTarget
 import com.qi.smbshare.data.discovery.SmbDiscoveryTargetParser
-import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.model.SmbDiscoveryHost
 import com.qi.smbshare.data.repository.ConnectionRepository
+import com.qi.smbshare.di.IoDispatcher
 import com.qi.smbshare.domain.usecase.ConnectSMBUseCase
 import com.qi.smbshare.domain.usecase.DeleteConnectionUseCase
 import com.qi.smbshare.domain.usecase.SaveConnectionUseCase
 import com.qi.smbshare.util.ErrorHandler
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,26 +27,22 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-class ConnectionViewModel internal constructor(
+@HiltViewModel
+class ConnectionViewModel @Inject constructor(
     application: Application,
     private val smbHostDiscovery: SmbHostDiscovery,
-    private val ioDispatcher: CoroutineDispatcher
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val connectionRepository: ConnectionRepository,
+    private val connectUseCase: ConnectSMBUseCase,
+    private val saveConnectionUseCase: SaveConnectionUseCase,
+    private val deleteConnectionUseCase: DeleteConnectionUseCase
 ) : AndroidViewModel(application) {
-    constructor(application: Application) : this(
-        application = application,
-        smbHostDiscovery = AndroidSmbHostDiscovery(application),
-        ioDispatcher = Dispatchers.IO
-    )
-
     private val TAG = "ConnectionViewModel"
-    private val connectionManager = SMBConnectionManager()
-    private val connectionRepository = ConnectionRepository(application)
-    private val connectUseCase = ConnectSMBUseCase(connectionManager)
-    private val saveConnectionUseCase = SaveConnectionUseCase(connectionRepository)
-    private val deleteConnectionUseCase = DeleteConnectionUseCase(connectionRepository)
     private var loadConnectionsJob: Job? = null
     private var discoveryJob: Job? = null
+    private var hasCheckedLastAccess = false
 
     private val _state = MutableStateFlow(ConnectionState())
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -129,6 +124,9 @@ class ConnectionViewModel internal constructor(
                     navigateToEdit = null
                 )
             }
+            is ConnectionIntent.ClearRestoredLastAccess -> {
+                _state.value = _state.value.copy(restoredLastAccess = null)
+            }
         }
     }
 
@@ -144,8 +142,32 @@ class ConnectionViewModel internal constructor(
                 }
                 .collect { configs ->
                     _state.value = _state.value.copy(savedConfigs = configs)
+                    restoreLastAccessIfNeeded(configs)
                 }
         }
+    }
+
+    private suspend fun restoreLastAccessIfNeeded(configs: List<SMBConfig>) {
+        if (hasCheckedLastAccess) {
+            return
+        }
+
+        if (configs.isEmpty()) {
+            return
+        }
+
+        val (lastConfigId, lastPath) = withContext(ioDispatcher) {
+            connectionRepository.getLastAccess()
+        }
+        hasCheckedLastAccess = true
+
+        val restoredConfig = configs.find { it.id == lastConfigId } ?: return
+        _state.value = _state.value.copy(
+            restoredLastAccess = RestoredLastAccess(
+                config = restoredConfig,
+                path = lastPath ?: ""
+            )
+        )
     }
 
     private fun saveConnection(config: SMBConfig) {

@@ -3,10 +3,11 @@ package com.qi.smbshare.domain.usecase
 import android.util.Log
 import com.qi.smbshare.data.repository.SMBFileRepository
 import java.io.IOException
+import javax.inject.Inject
 
 private const val TAG = "DeleteFileUseCase"
 
-class DeleteFileUseCase(
+class DeleteFileUseCase @Inject constructor(
     private val fileRepository: SMBFileRepository
 ) {
     suspend fun execute(path: String): Result<Unit> {
@@ -27,4 +28,3 @@ class DeleteFileUseCase(
         }
     }
 }
-

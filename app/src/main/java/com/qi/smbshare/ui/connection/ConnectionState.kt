@@ -17,6 +17,7 @@ data class ConnectionState(
     val discoveryError: String? = null,
     val error: String? = null,
     val testResult: String? = null,
+    val restoredLastAccess: RestoredLastAccess? = null,
     val navigateToFileList: SMBConfig? = null, // 导航到文件列表
     val navigateToEdit: SMBConfig? = null // 导航到编辑页面（null表示新建）
 ) {
@@ -28,3 +29,8 @@ data class ConnectionState(
     val formUsername: String get() = currentConfig?.username ?: ""
     val formPassword: String get() = currentConfig?.password ?: ""
 }
+
+data class RestoredLastAccess(
+    val config: SMBConfig,
+    val path: String
+)

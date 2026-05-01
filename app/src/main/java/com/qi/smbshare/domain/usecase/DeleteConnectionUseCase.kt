@@ -2,10 +2,13 @@ package com.qi.smbshare.domain.usecase
 
 import android.util.Log
 import com.qi.smbshare.data.repository.ConnectionRepository
+import javax.inject.Inject
 
 private const val TAG = "DeleteConnectionUseCase"
 
-class DeleteConnectionUseCase(private val connectionRepository: ConnectionRepository) {
+class DeleteConnectionUseCase @Inject constructor(
+    private val connectionRepository: ConnectionRepository
+) {
     suspend fun execute(configId: String): Result<Unit> {
         Log.d(TAG, "UseCase: 开始删除连接配置")
         Log.d(TAG, "配置ID: $configId")
@@ -22,4 +25,3 @@ class DeleteConnectionUseCase(private val connectionRepository: ConnectionReposi
         }
     }
 }
-

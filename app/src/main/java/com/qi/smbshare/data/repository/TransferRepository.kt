@@ -2,7 +2,6 @@ package com.qi.smbshare.data.repository
 
 import android.content.Context
 import android.content.Intent
-import com.qi.smbshare.data.local.TransferDatabase
 import com.qi.smbshare.data.local.TransferTaskDao
 import com.qi.smbshare.data.local.toEntity
 import com.qi.smbshare.data.local.toModel
@@ -11,6 +10,9 @@ import com.qi.smbshare.data.model.TransferStatus
 import com.qi.smbshare.data.model.TransferTask
 import com.qi.smbshare.data.model.TransferType
 import com.qi.smbshare.util.toJsonString
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -19,9 +21,10 @@ import java.util.UUID
  * 传输任务仓库
  * 负责管理传输任务的 CRUD 操作，与数据库和传输服务交互
  */
-class TransferRepository(
-    private val context: Context,
-    private val taskDao: TransferTaskDao = TransferDatabase.getInstance(context).transferTaskDao()
+@Singleton
+class TransferRepository @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val taskDao: TransferTaskDao
 ) {
     
     /**

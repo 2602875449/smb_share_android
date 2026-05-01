@@ -4,10 +4,13 @@ import android.util.Log
 import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.SMBConfig
 import java.io.IOException
+import javax.inject.Inject
 
 private const val TAG = "ConnectSMBUseCase"
 
-class ConnectSMBUseCase(private val connectionManager: SMBConnectionManager) {
+class ConnectSMBUseCase @Inject constructor(
+    private val connectionManager: SMBConnectionManager
+) {
     suspend fun execute(config: SMBConfig): Result<Unit> {
         Log.d(TAG, "UseCase: 开始执行连接")
         Log.d(TAG, "服务器: ${config.serverAddress}:${config.port}, 共享: ${config.shareName}")
@@ -48,4 +51,3 @@ class ConnectSMBUseCase(private val connectionManager: SMBConnectionManager) {
         return connectionManager.isConnected()
     }
 }
-

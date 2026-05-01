@@ -9,6 +9,8 @@ import com.qi.smbshare.data.model.TransferStatus
 import com.qi.smbshare.data.model.TransferType
 import com.qi.smbshare.data.repository.TransferRepository
 import com.qi.smbshare.util.ErrorHandler
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,10 +21,12 @@ import kotlinx.coroutines.launch
  * 传输管理器 ViewModel
  * 负责管理传输任务的 UI 状态和业务逻辑
  */
-class TransferManagerViewModel(application: Application) : AndroidViewModel(application) {
-    
-    private val transferRepository = TransferRepository(application)
-    
+@HiltViewModel
+class TransferManagerViewModel @Inject constructor(
+    application: Application,
+    private val transferRepository: TransferRepository
+) : AndroidViewModel(application) {
+
     private val _state = MutableStateFlow(TransferManagerState())
     val state: StateFlow<TransferManagerState> = _state.asStateFlow()
     

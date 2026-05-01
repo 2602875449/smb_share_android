@@ -3,10 +3,11 @@ package com.qi.smbshare.domain.usecase
 import android.util.Log
 import com.qi.smbshare.data.repository.SMBFileRepository
 import java.io.IOException
+import javax.inject.Inject
 
 private const val TAG = "RenameFileUseCase"
 
-class RenameFileUseCase(
+class RenameFileUseCase @Inject constructor(
     private val fileRepository: SMBFileRepository
 ) {
     suspend fun execute(
@@ -31,4 +32,3 @@ class RenameFileUseCase(
         }
     }
 }
-

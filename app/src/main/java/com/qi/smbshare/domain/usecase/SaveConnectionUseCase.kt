@@ -3,10 +3,13 @@ package com.qi.smbshare.domain.usecase
 import android.util.Log
 import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.repository.ConnectionRepository
+import javax.inject.Inject
 
 private const val TAG = "SaveConnectionUseCase"
 
-class SaveConnectionUseCase(private val connectionRepository: ConnectionRepository) {
+class SaveConnectionUseCase @Inject constructor(
+    private val connectionRepository: ConnectionRepository
+) {
     suspend fun execute(config: SMBConfig): Result<Unit> {
         Log.d(TAG, "UseCase: 开始保存连接配置")
         Log.d(TAG, "配置ID: ${config.id}, 名称: ${config.name}")
@@ -23,4 +26,3 @@ class SaveConnectionUseCase(private val connectionRepository: ConnectionReposito
         }
     }
 }
-

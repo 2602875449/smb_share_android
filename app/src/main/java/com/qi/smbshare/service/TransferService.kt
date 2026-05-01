@@ -32,6 +32,8 @@ import com.qi.smbshare.service.transfer.TransferProgressNotifier
 import com.qi.smbshare.service.transfer.TransferStreamCopier
 import com.qi.smbshare.service.transfer.UploadExecutor
 import com.qi.smbshare.util.toSMBConfigOrNull
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +51,7 @@ import kotlin.coroutines.coroutineContext
  * 负责在后台执行文件上传和下载任务
  * 使用前台服务确保长时间运行不被系统杀死
  */
+@AndroidEntryPoint
 class TransferService : Service() {
 
     companion object {
@@ -75,7 +78,7 @@ class TransferService : Service() {
         private const val RETRY_DELAY_MS = 5000L         // 重试延迟（毫秒）
     }
     
-    private lateinit var repository: TransferRepository
+    @Inject lateinit var repository: TransferRepository
     private lateinit var notificationManager: NotificationManager
     private lateinit var downloadExecutor: DownloadExecutor
     private lateinit var uploadExecutor: UploadExecutor
@@ -102,8 +105,7 @@ class TransferService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "TransferService onCreate")
-        
-        repository = TransferRepository(applicationContext)
+
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         setupTransferExecutors()
         

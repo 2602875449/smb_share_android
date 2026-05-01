@@ -1,8 +1,8 @@
 package com.qi.smbshare.ui.navigation
 
-import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,44 +31,41 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.qi.smbshare.R
-import com.qi.smbshare.data.local.DataStoreManager
 import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.ui.components.PredictiveBackAnimatedContent
+import com.qi.smbshare.ui.connection.ConnectionIntent
 import com.qi.smbshare.ui.connection.ConnectionScreen
 import com.qi.smbshare.ui.connection.ConnectionViewModel
 import com.qi.smbshare.ui.connection.EditConnectionScreen
 import com.qi.smbshare.ui.filelist.FileListScreen
 import com.qi.smbshare.ui.filelist.FileListViewModel
-import com.qi.smbshare.ui.filelist.FileListViewModelFactory
 import com.qi.smbshare.ui.settings.AboutScreen
 import com.qi.smbshare.ui.settings.PrivacyPolicyScreen
 import com.qi.smbshare.ui.settings.SettingsScreen
 import com.qi.smbshare.ui.settings.SettingsViewModel
 import com.qi.smbshare.ui.transfer.TransferManagerScreen
 import com.qi.smbshare.ui.transfer.TransferManagerViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
-fun AppNavGraph(onInstallApk: (File) -> Unit) {
+fun AppNavGraph(
+    onInstallApk: (File) -> Unit
+) {
     val navController = rememberNavController()
     var currentConfig by remember { mutableStateOf<SMBConfig?>(null) }
     var editConfig by remember { mutableStateOf<SMBConfig?>(null) }
     var initialPath by remember { mutableStateOf("") }
-    var isRestoringLastAccess by remember { mutableStateOf(true) }
     var isFilePreviewVisible by remember { mutableStateOf(false) }
 
-    val connectionViewModel: ConnectionViewModel = viewModel()
-    val transferManagerViewModel: TransferManagerViewModel = viewModel()
-    val settingsViewModel: SettingsViewModel = viewModel()
+    val connectionViewModel: ConnectionViewModel = hiltViewModel()
+    val transferManagerViewModel: TransferManagerViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
     val context = LocalContext.current
     val activity = context as? ComponentActivity
     val configuration = LocalConfiguration.current
@@ -88,25 +85,13 @@ fun AppNavGraph(onInstallApk: (File) -> Unit) {
     val connectionState by connectionViewModel.state.collectAsStateWithLifecycle()
     val activeTransferCount = transferState.activeTransferCount
 
-    LaunchedEffect(connectionState.savedConfigs) {
-        if (isRestoringLastAccess && connectionState.savedConfigs.isNotEmpty()) {
-            isRestoringLastAccess = false
-            val dataStoreManager = DataStoreManager(context.applicationContext)
-            val (lastConfigId, lastPath) = withContext(Dispatchers.IO) {
-                dataStoreManager.getLastAccess()
-            }
-
-            if (lastConfigId != null) {
-                val foundConfig = connectionState.savedConfigs.find { it.id == lastConfigId }
-                if (foundConfig != null) {
-                    currentConfig = foundConfig
-                    initialPath = lastPath ?: ""
-                    isFilePreviewVisible = false
-                    navController.navigateTopLevel(AppDestination.FileList.route)
-                }
-            }
-        } else if (isRestoringLastAccess) {
-            isRestoringLastAccess = false
+    LaunchedEffect(connectionState.restoredLastAccess) {
+        connectionState.restoredLastAccess?.let { restored ->
+            currentConfig = restored.config
+            initialPath = restored.path
+            isFilePreviewVisible = false
+            navController.navigateTopLevel(AppDestination.FileList.route)
+            connectionViewModel.handleIntent(ConnectionIntent.ClearRestoredLastAccess)
         }
     }
 
@@ -205,14 +190,12 @@ fun AppNavGraph(onInstallApk: (File) -> Unit) {
                 composable(AppDestination.FileList.route) {
                     val config = currentConfig
                     if (config != null) {
-                        val fileListViewModel: FileListViewModel = viewModel(
-                            factory = FileListViewModelFactory(
-                                application = context.applicationContext as Application,
-                                config = config,
-                                initialPath = initialPath
-                            ),
-                            key = "${config.id}_$initialPath"
-                        )
+                        val fileListViewModel: FileListViewModel =
+                            hiltViewModel<FileListViewModel, FileListViewModel.Factory>(
+                                key = "${config.id}_$initialPath"
+                            ) { factory ->
+                                factory.create(config, initialPath)
+                            }
                         val state by fileListViewModel.state.collectAsStateWithLifecycle()
 
                         LaunchedEffect(state.error) {

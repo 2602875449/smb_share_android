@@ -4,10 +4,13 @@ import android.util.Log
 import com.qi.smbshare.data.model.FileItem
 import com.qi.smbshare.data.repository.SMBFileRepository
 import java.io.IOException
+import javax.inject.Inject
 
 private const val TAG = "ListFilesUseCase"
 
-class ListFilesUseCase(private val fileRepository: SMBFileRepository) {
+class ListFilesUseCase @Inject constructor(
+    private val fileRepository: SMBFileRepository
+) {
     suspend fun execute(path: String = ""): Result<List<FileItem>> {
         Log.d(TAG, "UseCase: 开始获取文件列表，路径: $path")
         return try {
@@ -24,4 +27,3 @@ class ListFilesUseCase(private val fileRepository: SMBFileRepository) {
         }
     }
 }
-

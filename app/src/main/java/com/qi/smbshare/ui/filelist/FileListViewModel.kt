@@ -6,7 +6,6 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.viewModelScope
 import com.qi.smbshare.R
 import com.qi.smbshare.data.local.DataStoreManager
-import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.FileItem
 import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.repository.SMBFileRepository
@@ -19,6 +18,10 @@ import com.qi.smbshare.domain.usecase.RenameFileUseCase
 import com.qi.smbshare.domain.usecase.UploadFileUseCase
 import com.qi.smbshare.util.ErrorHandler
 import com.qi.smbshare.util.StorageHelper
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,21 +33,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class FileListViewModel(
+@HiltViewModel(assistedFactory = FileListViewModel.Factory::class)
+class FileListViewModel @AssistedInject constructor(
     application: Application,
-    private val config: SMBConfig,
-    initialPath: String = ""
+    private val transferRepository: TransferRepository,
+    private val dataStoreManager: DataStoreManager,
+    private val connectUseCase: ConnectSMBUseCase,
+    private val fileRepository: SMBFileRepository,
+    private val listFilesUseCase: ListFilesUseCase,
+    private val uploadFileUseCase: UploadFileUseCase,
+    private val createFolderUseCase: CreateFolderUseCase,
+    private val deleteFileUseCase: DeleteFileUseCase,
+    private val renameFileUseCase: RenameFileUseCase,
+    @Assisted private val config: SMBConfig,
+    @Assisted initialPath: String
 ) : AndroidViewModel(application) {
-    private val connectionManager = SMBConnectionManager()
-    private val fileRepository = SMBFileRepository(connectionManager)
-    private val transferRepository = TransferRepository(application)
-    private val dataStoreManager = DataStoreManager(application)
-    private val connectUseCase = ConnectSMBUseCase(connectionManager)
-    private val listFilesUseCase = ListFilesUseCase(fileRepository)
-    private val uploadFileUseCase = UploadFileUseCase(fileRepository)
-    private val createFolderUseCase = CreateFolderUseCase(fileRepository)
-    private val deleteFileUseCase = DeleteFileUseCase(fileRepository)
-    private val renameFileUseCase = RenameFileUseCase(fileRepository)
     private var previewJob: Job? = null
 
     private val initialBrowserPath = initialPath.trim('\\', '/')
@@ -59,6 +62,11 @@ class FileListViewModel(
     init {
         // 连接并加载文件
         connectAndLoadFiles()
+    }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(config: SMBConfig, initialPath: String): FileListViewModel
     }
 
     fun handleIntent(intent: FileListIntent) {
@@ -177,7 +185,7 @@ class FileListViewModel(
      */
     private suspend fun ensureConnected(forceReconnect: Boolean = false): Result<Unit> {
         return withContext(Dispatchers.IO) {
-            if (forceReconnect || !connectionManager.isConnected()) {
+            if (forceReconnect || !connectUseCase.isConnected()) {
                 connectUseCase.execute(config)
             } else {
                 Result.success(Unit)

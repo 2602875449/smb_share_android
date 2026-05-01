@@ -24,6 +24,7 @@ sealed class ConnectionIntent {
     object ClearForm : ConnectionIntent()
     data class EditConfig(val config: SMBConfig) : ConnectionIntent()
     object NavigateToNewConnection : ConnectionIntent() // 导航到新建连接页面
+    object ClearRestoredLastAccess : ConnectionIntent() // 清除最后访问恢复状态
     object ClearNavigation : ConnectionIntent() // 清除导航状态
 }
 

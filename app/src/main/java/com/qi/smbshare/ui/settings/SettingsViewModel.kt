@@ -9,6 +9,8 @@ import com.qi.smbshare.data.model.ThemeMode
 import com.qi.smbshare.util.LanguageHelper
 import com.qi.smbshare.util.AppLanguage
 import com.qi.smbshare.util.StorageHelper
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,10 +22,12 @@ import java.io.File
 /**
  * 设置页面的 ViewModel
  */
-class SettingsViewModel(application: Application) : AndroidViewModel(application) {
-    
-    private val dataStoreManager = DataStoreManager(application)
-    
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
+    application: Application,
+    private val dataStoreManager: DataStoreManager
+) : AndroidViewModel(application) {
+
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state.asStateFlow()
     

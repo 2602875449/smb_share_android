@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "检查是否符合项目后端/数据/服务层规范入口"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "检查 DI 新增文件位置和层边界"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查 Room/DataStore/Repository 单例提供和测试影响"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 ViewModel、Compose、测试和验证要求"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查日志和敏感信息边界"}
+{"file": ".trellis/tasks/05-01-hilt-dependency-injection/research/hilt-official-setup.md", "reason": "检查实现是否遵循官方 Hilt/KSP/Assisted Injection 方案"}

@@ -12,10 +12,13 @@ import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.util.Date
+import javax.inject.Inject
 
 private const val TAG = "SMBFileRepository"
 
-class SMBFileRepository(private val connectionManager: SMBConnectionManager) {
+class SMBFileRepository @Inject constructor(
+    private val connectionManager: SMBConnectionManager
+) {
 
     /**
      * 列出指定路径下的文件和文件夹

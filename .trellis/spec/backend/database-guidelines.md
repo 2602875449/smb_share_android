@@ -34,7 +34,8 @@ Room 当前只用于传输任务。
 - 使用数据库版本 `3`。
 - 设置 `exportSchema = false`。
 - 暴露 `transferTaskDao()`。
-- 使用带 double-checked locking 的 singleton `getInstance(context)`。
+- 生产路径由 Hilt `AppModule` 以 `@Singleton` 提供数据库实例，再从数据库提供 `TransferTaskDao`。
+- 保留带 double-checked locking 的 `getInstance(context)` 作为兼容入口时，不要在新的生产调用点继续直接使用它。
 - 当前使用 `.fallbackToDestructiveMigration(true)`，并通过行内注释说明这是开发阶段选择。
 
 示例：
@@ -138,7 +139,7 @@ Repository 包装持久化和 service 交互。ViewModel 应调用 use case 或 
 - `app/src/main/java/com/qi/smbshare/data/repository/ConnectionRepository.kt`
 - `app/src/main/java/com/qi/smbshare/data/repository/TransferRepository.kt`
 
-`TransferRepository` 接受 `TransferTaskDao` 构造参数，并默认使用来自 `TransferDatabase` 的 DAO。测试使用这一点注入 in-memory Room DAO。
+`TransferRepository` 接受 `@ApplicationContext Context` 和 `TransferTaskDao` 构造参数。生产路径由 Hilt 注入，测试使用这一点注入 in-memory Room DAO。
 
 示例：
 
