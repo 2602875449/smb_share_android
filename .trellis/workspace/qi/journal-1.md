@@ -104,3 +104,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: 引入 Hilt 依赖注入
+
+**Date**: 2026-05-01
+**Task**: 引入 Hilt 依赖注入
+**Branch**: `master`
+
+### Summary
+
+接入 Hilt/KSP，新增 Application 与 DI modules，将共享依赖、Service 和 ViewModel 切换到注入，FileListViewModel 使用 Assisted Injection 替代手写工厂，并补充规范与验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `be6d8eb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
