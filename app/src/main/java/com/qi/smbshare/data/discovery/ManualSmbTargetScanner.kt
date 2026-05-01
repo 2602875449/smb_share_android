@@ -3,60 +3,87 @@ package com.qi.smbshare.data.discovery
 import android.util.Log
 import com.qi.smbshare.data.model.SmbDiscoveryHost
 import com.qi.smbshare.data.model.SmbDiscoverySource
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
+import java.net.InetAddress
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.flow.channelFlow
 
-private const val MANUAL_SCAN_TAG = "ManualSmbScanner"
+private const val TAG = "ManualSmbTargetScanner"
+private const val DEFAULT_SMB_PORT = 445
+private const val CONNECT_TIMEOUT_MILLIS = 450
+private const val NET_BIOS_TIMEOUT_MILLIS = 350
 
+/**
+ * 手动目标扫描器：对指定的 IP 或 CIDR 地址范围进行主动 SMB 探测。
+ *
+ * 与被动发现不同，此扫描器对 [SmbDiscoveryTarget.addresses] 中的
+ * 每个地址依次进行 TCP 445 端口检测和 NetBIOS 名称查询。
+ */
 internal class ManualSmbTargetScanner(
     private val target: SmbDiscoveryTarget,
     private val tcpPortChecker: TcpPortChecker,
-    private val netBiosNameServiceClient: NetBiosNameServiceClient,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val smbPort: Int = 445,
-    private val connectTimeoutMillis: Int = 450,
-    private val nameTimeoutMillis: Int = 350,
-    private val concurrency: Int = 24
+    private val netBiosNameServiceClient: NetBiosNameServiceClient
 ) : SmbHostDiscoverySource {
 
-    override fun discover(): Flow<SmbDiscoveryHost> = flow {
-        val semaphore = Semaphore(concurrency)
-        Log.d(
-            MANUAL_SCAN_TAG,
-            "开始手动 SMB 目标探测，输入=${target.input}, 候选主机数=${target.addresses.size}"
-        )
-
-        // 手动目标用于跨子网路由可达场景，不依赖 mDNS/NetBIOS 广播。
-        val discoveredHosts = coroutineScope {
-            target.addresses.map { address ->
-                async(ioDispatcher) {
-                    semaphore.withPermit {
-                        if (!currentCoroutineContext().isActive) return@withPermit null
-                        if (!tcpPortChecker.canConnect(address, smbPort, connectTimeoutMillis)) {
-                            return@withPermit null
-                        }
-                        val hostName = netBiosNameServiceClient.queryHostName(address, nameTimeoutMillis)
-                        val hostAddress = address.hostAddress ?: return@withPermit null
-                        SmbDiscoveryHost(
-                            displayName = hostName ?: hostAddress,
-                            address = hostAddress,
-                            port = smbPort,
-                            source = SmbDiscoverySource.MANUAL
-                        )
-                    }
+    override fun discover(): Flow<SmbDiscoveryHost> = channelFlow {
+        if (target.addresses.size == 1) {
+            val address = target.addresses.single()
+            val reachable = tcpPortChecker.canConnect(
+                address = address,
+                port = DEFAULT_SMB_PORT,
+                timeoutMillis = CONNECT_TIMEOUT_MILLIS
+            )
+            if (reachable) {
+                val name = resolveNetBiosName(address)
+                val hostAddress = address.hostAddress ?: address.toString()
+                send(
+                    SmbDiscoveryHost(
+                        displayName = name ?: hostAddress,
+                        address = hostAddress,
+                        port = DEFAULT_SMB_PORT,
+                        source = SmbDiscoverySource.MANUAL
+                    )
+                )
+            } else {
+                Log.d(TAG, "目标不可达: ${address.hostAddress}")
+            }
+        } else {
+            val reachableAddresses = target.addresses.map { address ->
+                async {
+                    val reachable = tcpPortChecker.canConnect(
+                        address = address,
+                        port = DEFAULT_SMB_PORT,
+                        timeoutMillis = CONNECT_TIMEOUT_MILLIS
+                    )
+                    if (reachable) address else null
                 }
             }.awaitAll().filterNotNull()
-        }
 
-        discoveredHosts.forEach { emit(it) }
+            reachableAddresses.forEach { address ->
+                val name = resolveNetBiosName(address)
+                val hostAddress = address.hostAddress ?: address.toString()
+                send(
+                    SmbDiscoveryHost(
+                        displayName = name ?: hostAddress,
+                        address = hostAddress,
+                        port = DEFAULT_SMB_PORT,
+                        source = SmbDiscoverySource.MANUAL
+                    )
+                )
+            }
+        }
+    }
+
+    private suspend fun resolveNetBiosName(address: InetAddress): String? {
+        return try {
+            netBiosNameServiceClient.queryHostName(
+                address = address,
+                timeoutMillis = NET_BIOS_TIMEOUT_MILLIS
+            )
+        } catch (e: Exception) {
+            Log.d(TAG, "NetBIOS 名称解析失败: ${address.hostAddress}", e)
+            null
+        }
     }
 }
