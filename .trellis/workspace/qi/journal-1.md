@@ -71,3 +71,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Navigation Compose 全量迁移
+
+**Date**: 2026-05-01
+**Task**: Navigation Compose 全量迁移
+**Branch**: `master`
+
+### Summary
+
+将 MainActivity 顶层导航迁移到 Navigation Compose，抽出 AppNavGraph、底部导航和 BadgedIcon，并归档任务。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a15054c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
