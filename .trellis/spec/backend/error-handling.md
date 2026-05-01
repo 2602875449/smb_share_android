@@ -192,18 +192,26 @@ Screen 使用 `LaunchedEffect` 消费一次性 state，并通过 intent 清除�
 
 ## 传输错误模式
 
-后台传输执行具有 service-local 错误分类。
+后台传输执行具有传输模块内的错误分类。
 
 示例：
 
 - `app/src/main/java/com/qi/smbshare/service/TransferService.kt`
+- `app/src/main/java/com/qi/smbshare/service/transfer/TransferErrors.kt`
 
 当前传输类型：
 
 - `TransferErrorType`
 - `TransferException`
 
-service 会为了重试行为分类网络和超时错误，而文件/auth/unknown 错误单独处理。除非任务明确要求抽取，否则将传输重试逻辑保留在 `TransferService` 附近。
+执行器负责把底层 IO/权限异常转换为 `TransferException`，`TransferService` 负责根据错误类型执行重试和最终任务状态更新。网络和超时错误可重试；文件、认证和未知错误不重试。
+
+上传输入流边界必须保留这些分类：
+
+- 本地文件不存在、不可读或 `content://` 无法打开输入流 -> `FILE_ERROR`
+- `SecurityException`（例如系统文件选择器 URI 权限失效）-> `FILE_ERROR`
+- 网络连接中断、UnknownHost 或连接类 IO 错误 -> `NETWORK_ERROR`
+- Socket timeout -> `TIMEOUT_ERROR`
 
 ---
 

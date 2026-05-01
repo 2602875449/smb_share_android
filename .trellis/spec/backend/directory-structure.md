@@ -150,6 +150,68 @@ viewModel.handleIntent(ConnectionIntent.StartDiscovery)
 - `app/src/main/java/com/qi/smbshare/ui/settings/SettingsScreen.kt`
 - `app/src/main/java/com/qi/smbshare/ui/transfer/TransferManagerScreen.kt`
 
+### 后台传输服务
+
+长时间运行的前台服务仍放在 `service/` 下，但单个上传/下载任务的具体执行逻辑应拆到 `service/transfer/` 辅助类中，避免 Service 同时承担生命周期、Intent 分发和流复制职责。
+
+#### 1. Scope / Trigger
+
+- Trigger：修改后台上传、下载、进度计算、暂停/取消检查或传输异常分类。
+- 目标：`TransferService` 保留前台服务生命周期、Intent action、通知、并发信号量、活动 Job、暂停/取消集合、网络监听和重试调度；执行器只负责单个任务的文件读写。
+
+#### 2. Signatures
+
+- `DownloadExecutor.execute(task: TransferTask, config: SMBConfig)`
+- `UploadExecutor.execute(task: TransferTask, config: SMBConfig)`
+- `TransferStreamCopier.copy(inputStream, outputStream, task, direction, finalProgress)`
+- `TransferControl.waitWhilePaused(taskId)` / `ensureTaskNotCancelled(taskId)`
+- `TransferTaskUpdater.updateProgress(...)` / `updateTaskLocalPath(...)`
+
+#### 3. Contracts
+
+- Intent action 和 extras 必须继续由 `TransferService` 暴露，调用方不应直接依赖执行器。
+- 上传/下载共用 `TransferStreamCopier` 的 256KB 缓冲区、每秒进度更新、速度计算、暂停/取消检查和协程 active 检查。
+- 下载执行器负责 `StorageHelper.createDownloadFileOutputStream()`、Android 10+ `finishDownloadFile()` 和本地路径更新。
+- 上传执行器负责普通路径与 `content://` URI 输入流打开，不先复制到缓存目录。
+- 执行器依赖通过构造函数手动传入；不要为了传输拆分引入 Hilt 或迁移导航。
+
+#### 4. Validation & Error Matrix
+
+- 暂停任务 -> 复制循环阻塞等待，恢复后继续；取消任务 -> 抛出 `CancellationException`，避免误写失败状态。
+- 网络/超时读写异常 -> 转为 `TransferException` 并交由 `TransferService` 原有重试策略处理。
+- 本地上传文件不存在、无权限或 content URI 无流 -> `FILE_ERROR`。
+- 下载实际路径或 pending 收尾路径变化 -> 通过 `updateTaskLocalPath()` 更新任务。
+
+#### 5. Good/Base/Bad Cases
+
+- Good：新增传输行为时扩展执行器或小型 helper，Service 只接线回调与调度。
+- Base：只改通知或网络暂停策略时，变更留在 `TransferService`。
+- Bad：把 SMB `openFile`、本地输入流打开、流复制循环和进度计算重新写回 `TransferService`。
+
+#### 6. Tests Required
+
+- 单测覆盖共享复制器的进度、速度、最终进度和 256KB 缓冲区契约。
+- 单测覆盖上传输入流普通路径、文件不存在和 `content://` 空流。
+- 单测覆盖传输读写异常到 `TransferException` 类型的映射。
+- 涉及真实 SMB 或 Android 存储的执行器路径优先通过依赖注入 fake 边界测试，不要求 JVM 单测连接真实 SMB。
+
+#### 7. Wrong vs Correct
+
+Wrong：
+
+```kotlin
+private suspend fun executeUpload(task: TransferTask, config: SMBConfig) {
+    val buffer = ByteArray(256 * 1024)
+    // 在 Service 中直接循环读写并计算进度
+}
+```
+
+Correct：
+
+```kotlin
+uploadExecutor.execute(task, config)
+```
+
 ### 共享 UI 与主题
 
 将可复用 Compose 组件放在 `ui/components/` 下，将共享颜色、排版和主题定义放在 `ui/theme/` 下。
