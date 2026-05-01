@@ -296,27 +296,13 @@ class TransferRepository(
         transferredBytes: Long,
         speed: Long
     ) {
-        val entity = taskDao.getTaskById(taskId) ?: return
-        val task = entity.toModel()
-        
-        // 计算预计剩余时间
-        val remainingBytes = (task.fileSize - transferredBytes).coerceAtLeast(0)
-        val estimatedTimeRemaining = if (speed > 0) {
-            (remainingBytes * 1000) / speed  // 转换为毫秒
-        } else {
-            0L
-        }
-        
-        // 更新任务信息
-        val updatedTask = task.copy(
+        taskDao.updateProgress(
+            taskId = taskId,
             progress = progress.coerceIn(0, 100),
             transferredBytes = transferredBytes,
             speed = speed,
-            estimatedTimeRemaining = estimatedTimeRemaining,
             lastUpdatedAt = System.currentTimeMillis()
         )
-        
-        taskDao.updateTask(updatedTask.toEntity())
     }
     
     /**

@@ -78,13 +78,14 @@
 
 - `FileListIntent.PreviewFile(filePath: String, fileName: String)`
 - `FileListIntent.ClosePreview`
-- `PreviewState.ImageReady(bytes: ByteArray)`
+- `PreviewState.ImageReady(cacheFile: File)`
 - `PreviewState.TextReady(content: String, isTruncated: Boolean = false)`
 
 #### 3. Contracts
 
 - 预览入口只对 `FileTypeHelper.isPreviewable(file.name)` 返回 true 的文件显示。
-- 图片文件由 ViewModel 通过 `SMBFileRepository.getFileInputStream(filePath)` 读取字节，UI 使用图片加载组件从内存字节解码。
+- 图片文件由 ViewModel 通过 `SMBFileRepository.getFileInputStream(filePath)` 流式写入本地缓存文件，UI 使用图片加载组件从 `ImageReady.cacheFile` 解码。
+- 切换到另一个预览文件、关闭预览或 `ViewModel.onCleared()` 时，必须删除已经进入 `ImageReady` 的本地缓存文件；读取中取消或失败时由预览协程删除未移交的临时文件。
 - 文本文件最多读取 1 MB；超过限制时 `isTruncated = true`，UI 显示截断提示。
 - 预览覆盖层可见时由 `previewFileName != null` 表示，关闭预览必须取消当前预览协程并把状态恢复为 `PreviewState.Idle`。
 
@@ -92,21 +93,24 @@
 
 - SMB 流打开或读取失败 -> `PreviewState.Error`，显示本地化错误文案。
 - 重新打开另一个预览文件 -> 取消旧预览协程，只允许当前文件更新 state。
+- 图片缓存文件创建或写入失败 -> 删除未移交临时文件，并显示预览失败错误。
 - 文本超过 1 MB -> 显示前 1 MB，并展示截断提示。
 - 系统返回 / 顶部返回 -> 关闭预览，不退出文件列表页。
 
 #### 5. Good/Base/Bad Cases
 
-- Good：图片和文本读取都在 `Dispatchers.IO` 中执行，Composable 只消费 state。
+- Good：图片流式写入 cacheDir 后进入 `ImageReady(cacheFile)`，文本最多读取 1 MB；两者都在 `Dispatchers.IO` 中执行，Composable 只消费 state。
 - Good：预览页复用 `PredictiveBackAnimatedContent`，并隐藏下层底部导航。
 - Base：不支持的文件类型不显示预览入口。
 - Bad：在 `FilePreviewScreen` 中直接调用 repository 或打开 SMB 流。
+- Bad：图片预览使用 `readBytes()` 一次性读取完整远端文件。
 - Bad：文本预览无大小上限，导致大文件一次性读入内存。
 
 #### 6. Tests Required
 
 - `FileTypeHelper` 单测覆盖图片、文本和不可预览类型。
-- 状态单测覆盖 `ImageReady`、`TextReady(isTruncated = true)`、`Error` 和关闭预览后的 `Idle`。
+- 状态单测覆盖 `ImageReady(cacheFile)`、`TextReady(isTruncated = true)`、`Error` 和关闭预览后的 `Idle`。
+- 缓存工具单测覆盖图片缓存文件名清理和 `deleteReadyImageCache(PreviewState.ImageReady(file))` 删除真实文件。
 - ViewModel 行为变化时，补充 fake repository 测试读取成功、读取失败和取消旧预览的 state 转换。
 
 #### 7. Wrong vs Correct
@@ -114,13 +118,19 @@
 Wrong：
 
 ```kotlin
-val text = repository.getFileInputStream(path).readBytes().decodeToString()
+val bytes = repository.getFileInputStream(path).readBytes()
+_state.value = _state.value.copy(previewState = PreviewState.ImageReady(bytes))
 ```
 
 Correct：
 
 ```kotlin
-viewModel.handleIntent(FileListIntent.PreviewFile(file.path, file.name))
+repository.getFileInputStream(path).use { input ->
+    cacheFile.outputStream().use { output ->
+        input.copyTo(output, bufferSize = 64 * 1024)
+    }
+}
+_state.value = _state.value.copy(previewState = PreviewState.ImageReady(cacheFile))
 ```
 
 ---

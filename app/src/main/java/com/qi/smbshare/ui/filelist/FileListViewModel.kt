@@ -141,7 +141,7 @@ class FileListViewModel(
             is FileListIntent.ClosePreview -> {
                 previewJob?.cancel()
                 previewJob = null
-                clearReadyVideoCache()
+                clearReadyPreviewCache()
                 _state.value = _state.value.copy(
                     previewFileName = null,
                     previewState = PreviewState.Idle
@@ -526,17 +526,18 @@ class FileListViewModel(
 
     /**
      * 在线预览文件：根据文件类型分发到图片/文本/视频预览状态。
-     * - 图片：全量读入内存，交 Coil 解码。
+     * - 图片：流式写入缓存文件，交 Coil 从本地文件解码。
      * - 文本：最多读取 1 MB，超出截断，避免 OOM。
      * - 视频：流式写入缓存目录临时文件，带进度；完成后由 ExoPlayer 读取本地文件。
      */
     private fun previewFile(filePath: String, fileName: String) {
         previewJob?.cancel()
-        clearReadyVideoCache()
+        clearReadyPreviewCache()
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             val activeJob = coroutineContext[Job]
-            // 视频临时文件引用，被取消或出错时在 finally 中删除
+            // 预览临时文件引用，被取消或出错时在 finally 中删除
             var tempVideoFile: File? = null
+            var tempImageFile: File? = null
             try {
                 _state.value = _state.value.copy(
                     previewFileName = fileName,
@@ -614,28 +615,59 @@ class FileListViewModel(
                             )
                             _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
                         }
-                } else {
-                    // 图片 / 文本：现有内存读取逻辑
+                } else if (isImage) {
+                    val cacheFile = createImagePreviewCacheFile(
+                        cacheDir = getApplication<Application>().cacheDir,
+                        fileName = fileName
+                    )
+                    tempImageFile = cacheFile
+
                     val result = withContext(Dispatchers.IO) {
                         runCatching {
-                            val stream = fileRepository.getFileInputStream(filePath)
-                            stream.use { input ->
-                                if (isImage) {
-                                    // 图片：全量读取（由 Coil 处理内存）
-                                    input.readBytes()
-                                } else {
-                                    // 文本：最多读取 1 MB，超出截断
-                                    val maxBytes = 1 * 1024 * 1024
-                                    val buffer = ByteArray(maxBytes + 1)
-                                    var totalRead = 0
+                            fileRepository.getFileInputStream(filePath).use { input ->
+                                cacheFile.outputStream().use { output ->
+                                    // 图片预览复用流式缓存路径，避免全量读入导致大图占用双份内存。
+                                    val buffer = ByteArray(64 * 1024)
                                     var bytesRead: Int
-                                    while (totalRead <= maxBytes) {
-                                        bytesRead = input.read(buffer, totalRead, buffer.size - totalRead)
-                                        if (bytesRead == -1) break
-                                        totalRead += bytesRead
+                                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                                        ensureActive()
+                                        output.write(buffer, 0, bytesRead)
                                     }
-                                    buffer.copyOf(totalRead.coerceAtMost(maxBytes + 1))
                                 }
+                            }
+                        }
+                    }
+
+                    result
+                        .onSuccess {
+                            if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onSuccess
+                            _state.value = _state.value.copy(previewState = PreviewState.ImageReady(cacheFile))
+                            // 所有权转让给 state，不在 finally 中删除
+                            tempImageFile = null
+                        }
+                        .onFailure { e ->
+                            if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onFailure
+                            val msg = formatError(
+                                e as? Exception ?: RuntimeException(e),
+                                R.string.error_preview_failed
+                            )
+                            _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
+                        }
+                } else {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching {
+                            fileRepository.getFileInputStream(filePath).use { input ->
+                                // 文本：最多读取 1 MB，超出截断
+                                val maxBytes = 1 * 1024 * 1024
+                                val buffer = ByteArray(maxBytes + 1)
+                                var totalRead = 0
+                                var bytesRead: Int
+                                while (totalRead <= maxBytes) {
+                                    bytesRead = input.read(buffer, totalRead, buffer.size - totalRead)
+                                    if (bytesRead == -1) break
+                                    totalRead += bytesRead
+                                }
+                                buffer.copyOf(totalRead.coerceAtMost(maxBytes + 1))
                             }
                         }
                     }
@@ -643,14 +675,10 @@ class FileListViewModel(
                     result
                         .onSuccess { bytes ->
                             if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onSuccess
-                            _state.value = if (isImage) {
-                                _state.value.copy(previewState = PreviewState.ImageReady(bytes))
-                            } else {
-                                val isTruncated = bytes.size > 1 * 1024 * 1024
-                                val content = bytes.take(1 * 1024 * 1024).toByteArray()
-                                    .toString(Charsets.UTF_8)
-                                _state.value.copy(previewState = PreviewState.TextReady(content, isTruncated))
-                            }
+                            val isTruncated = bytes.size > 1 * 1024 * 1024
+                            val content = bytes.take(1 * 1024 * 1024).toByteArray()
+                                .toString(Charsets.UTF_8)
+                            _state.value = _state.value.copy(previewState = PreviewState.TextReady(content, isTruncated))
                         }
                         .onFailure { e ->
                             if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onFailure
@@ -662,8 +690,9 @@ class FileListViewModel(
                         }
                 }
             } finally {
-                // 被取消或出错时删除未移交的视频临时文件
+                // 被取消或出错时删除未移交的临时文件
                 tempVideoFile?.delete()
+                tempImageFile?.delete()
                 if (previewJob === activeJob) {
                     previewJob = null
                 }
@@ -673,9 +702,10 @@ class FileListViewModel(
         job.start()
     }
 
-    private fun clearReadyVideoCache() {
-        // 只有已移交给 state 的缓存文件会走这里；下载中的临时文件由协程 finally 清理。
+    private fun clearReadyPreviewCache() {
+        // 只有已移交给 state 的缓存文件会走这里；下载/读取中的临时文件由协程 finally 清理。
         deleteReadyVideoCache(_state.value.previewState)
+        deleteReadyImageCache(_state.value.previewState)
     }
 
     private fun text(@StringRes resId: Int): String {
@@ -698,7 +728,7 @@ class FileListViewModel(
         super.onCleared()
         previewJob?.cancel()
         previewJob = null
-        clearReadyVideoCache()
+        clearReadyPreviewCache()
         connectUseCase.disconnect()
     }
 }

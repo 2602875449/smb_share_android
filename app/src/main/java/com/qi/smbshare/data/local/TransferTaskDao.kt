@@ -62,6 +62,35 @@ interface TransferTaskDao {
      */
     @Update
     suspend fun updateTask(task: TransferTaskEntity)
+
+    /**
+     * 高频进度更新只改动进度相关列，避免每秒读取并回写完整 Entity。
+     */
+    @Query(
+        """
+        UPDATE transfer_tasks
+        SET progress = :progress,
+            transferredBytes = :transferredBytes,
+            speed = :speed,
+            estimatedTimeRemaining = CASE
+                WHEN :speed > 0 THEN
+                    ((CASE
+                        WHEN fileSize - :transferredBytes > 0 THEN fileSize - :transferredBytes
+                        ELSE 0
+                    END) * 1000) / :speed
+                ELSE 0
+            END,
+            lastUpdatedAt = :lastUpdatedAt
+        WHERE id = :taskId
+        """
+    )
+    suspend fun updateProgress(
+        taskId: String,
+        progress: Int,
+        transferredBytes: Long,
+        speed: Long,
+        lastUpdatedAt: Long
+    ): Int
     
     /**
      * 删除任务

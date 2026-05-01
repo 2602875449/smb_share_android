@@ -69,6 +69,7 @@ DAO 是 `data/local/` 下带 `@Dao` 注解的 interface。
 - `getTaskById(taskId: String): TransferTaskEntity?`
 - `insertTask(task: TransferTaskEntity): Long`
 - `updateTask(task: TransferTaskEntity)`
+- `updateProgress(taskId, progress, transferredBytes, speed, lastUpdatedAt): Int` 使用局部 `UPDATE` 只写进度相关列，预计剩余时间在 SQL 中基于 `fileSize` 计算，避免高频进度更新全量读取和回写 entity。
 - `deleteTasksByIds(taskIds: List<String>)`
 
 ---

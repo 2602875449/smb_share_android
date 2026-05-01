@@ -4,7 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 /**
  * 验证预览相关状态转换的正确性：
@@ -12,6 +14,9 @@ import org.junit.Test
  * - [FileListState] 预览字段的初始值和更新行为
  */
 class FilePreviewStateTest {
+
+    @get:Rule
+    val tempFolder = TemporaryFolder()
 
     // ── PreviewState ──────────────────────────────────────────────────────────
 
@@ -28,10 +33,11 @@ class FilePreviewStateTest {
     }
 
     @Test
-    fun `PreviewState ImageReady 持有字节数组`() {
-        val bytes = byteArrayOf(1, 2, 3)
-        val previewState = PreviewState.ImageReady(bytes)
-        assertEquals(3, previewState.bytes.size)
+    fun `PreviewState ImageReady 持有缓存文件`() {
+        val file = tempFolder.newFile("photo.jpg")
+        val previewState = PreviewState.ImageReady(file)
+        assertEquals(file.absolutePath, previewState.cacheFile.absolutePath)
+        assertTrue(previewState.cacheFile.exists())
     }
 
     @Test
@@ -76,7 +82,7 @@ class FilePreviewStateTest {
     fun `关闭预览后 previewFileName 恢复 null`() {
         val state = FileListState(
             previewFileName = "photo.jpg",
-            previewState = PreviewState.ImageReady(byteArrayOf())
+            previewState = PreviewState.ImageReady(tempFolder.newFile("closed-photo.jpg"))
         ).copy(
             previewFileName = null,
             previewState = PreviewState.Idle
@@ -100,5 +106,28 @@ class FilePreviewStateTest {
         // 预览状态已更新
         val text = state.previewState as PreviewState.TextReady
         assertEquals("内容", text.content)
+    }
+
+    @Test
+    fun `createImagePreviewCacheFile 会清理远端文件名中的路径分隔符`() {
+        val file = createImagePreviewCacheFile(
+            cacheDir = tempFolder.root,
+            fileName = "../unsafe/folder/photo.jpg",
+            nowMillis = 456L
+        )
+
+        assertEquals(tempFolder.root.absolutePath, file.parentFile?.absolutePath)
+        assertFalse(file.name.contains("/"))
+        assertFalse(file.name.contains("\\"))
+        assertTrue(file.name.startsWith("image_preview_456_"))
+    }
+
+    @Test
+    fun `deleteReadyImageCache 只删除 ImageReady 持有的缓存文件`() {
+        val file = tempFolder.newFile("cached_photo.jpg")
+
+        assertTrue(deleteReadyImageCache(PreviewState.ImageReady(file)))
+        assertFalse(file.exists())
+        assertFalse(deleteReadyImageCache(PreviewState.Loading))
     }
 }

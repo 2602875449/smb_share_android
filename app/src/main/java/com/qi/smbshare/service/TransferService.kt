@@ -96,8 +96,8 @@ class TransferService : Service() {
         // 进度更新间隔（毫秒）
         private const val PROGRESS_UPDATE_INTERVAL = 1000L
         
-        // 缓冲区大小（8KB）
-        private const val BUFFER_SIZE = 8192
+        // 文件传输使用 256KB 缓冲区，减少大文件读写时的系统调用次数，同时避免单任务占用过多内存。
+        private const val BUFFER_SIZE = 256 * 1024
         
         // 重试配置
         private const val MAX_NETWORK_ERROR_RETRIES = 3  // 网络错误最大重试次数

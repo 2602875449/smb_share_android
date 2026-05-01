@@ -113,6 +113,43 @@ class TransferRepositoryTest {
         assertEquals(500_000, updated.transferredBytes)
         assertEquals(250_000, updated.speed)
         assertTrue("应给出预计剩余时间", updated.estimatedTimeRemaining > 0)
+        assertEquals("局部更新不应改变任务状态", TransferStatus.ACTIVE.name, updated.status)
+        assertEquals("局部更新不应改变配置载荷", task.toEntity().configData, updated.configData)
+        assertTrue("应刷新最后更新时间", updated.lastUpdatedAt >= task.lastUpdatedAt)
+    }
+
+    @Test
+    fun `updateProgress should clamp progress and reset ETA when speed is zero`() = runTest {
+        val task = TransferTask(
+            id = "task-2",
+            type = TransferType.DOWNLOAD,
+            fileName = "large.iso",
+            fileSize = 1_000L,
+            remotePath = "\\\\nas\\large.iso",
+            localPath = "/tmp/large.iso",
+            config = sampleConfig(),
+            status = TransferStatus.ACTIVE,
+            progress = 0,
+            transferredBytes = 0,
+            speed = 1,
+            estimatedTimeRemaining = 1_000
+        )
+        dao.insertTask(task.toEntity())
+
+        repository.updateProgress(
+            taskId = task.id,
+            progress = 150,
+            transferredBytes = 900,
+            speed = 0
+        )
+
+        val updated = dao.getTaskById(task.id)
+        assertNotNull(updated)
+        assertEquals(100, updated!!.progress)
+        assertEquals(900, updated.transferredBytes)
+        assertEquals(0, updated.speed)
+        assertEquals(0, updated.estimatedTimeRemaining)
+        assertEquals(TransferStatus.ACTIVE.name, updated.status)
     }
 
     private fun sampleConfig(): SMBConfig {

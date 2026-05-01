@@ -1,0 +1,60 @@
+package com.qi.smbshare.data.local
+
+import com.hierynomus.smbj.share.DiskShare
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
+import io.mockk.runs
+import io.mockk.verify
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * 验证 SMBConnectionManager 对共享连接状态的并发访问有单一锁保护。
+ */
+class SMBConnectionManagerTest {
+
+    @Test
+    fun `disconnect under concurrent access closes current share only once`() {
+        val manager = SMBConnectionManager()
+        val diskShare = mockk<DiskShare>()
+        every { diskShare.isConnected } returns true
+        every { diskShare.close() } just runs
+        manager.setPrivateField("diskShare", diskShare)
+
+        val workers = 16
+        val ready = CountDownLatch(workers)
+        val start = CountDownLatch(1)
+        val done = CountDownLatch(workers)
+        val executor = Executors.newFixedThreadPool(workers)
+
+        repeat(workers) { index ->
+            executor.execute {
+                ready.countDown()
+                start.await()
+                if (index % 2 == 0) {
+                    manager.disconnect()
+                } else {
+                    manager.isConnected()
+                }
+                done.countDown()
+            }
+        }
+
+        assertTrue(ready.await(2, TimeUnit.SECONDS))
+        start.countDown()
+        assertTrue(done.await(2, TimeUnit.SECONDS))
+        executor.shutdownNow()
+
+        verify(exactly = 1) { diskShare.close() }
+    }
+
+    private fun SMBConnectionManager.setPrivateField(name: String, value: Any?) {
+        val field = SMBConnectionManager::class.java.getDeclaredField(name)
+        field.isAccessible = true
+        field.set(this, value)
+    }
+}

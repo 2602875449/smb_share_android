@@ -17,55 +17,58 @@ class SMBConnectionManager {
     private var session: Session? = null
     private var diskShare: DiskShare? = null
     private val client = SMBClient()
+    private val connectionLock = Any()
 
     /**
      * 连接到SMB服务器
      */
     @Throws(IOException::class)
     fun connect(config: SMBConfig): DiskShare {
-        try {
-            // 断开现有连接
-            disconnect()
+        synchronized(connectionLock) {
+            try {
+                // 断开现有连接；连接三元组必须在同一把锁下更新，避免并发读取到半初始化状态。
+                disconnectLocked()
 
-            // 创建连接
-            connection = client.connect(
-                config.serverAddress,
-                config.port
-            )
-
-            // 创建认证上下文
-            val authContext = if (config.isAnonymous) {
-                // 匿名登录：使用 Guest 用户和空密码
-                // 大多数 SMB 服务器使用 Guest 用户来实现匿名访问
-                Log.d(TAG, "使用匿名登录（Guest 用户，空密码）")
-                AuthenticationContext("Guest", "".toCharArray(), null)
-            } else {
-                // 用户名密码登录，仅在调试构建中打印用户名，避免生产日志泄露凭据
-                if (BuildConfig.DEBUG) Log.d(TAG, "使用用户名密码登录: ${config.username}")
-                AuthenticationContext(
-                    config.username,
-                    config.password.toCharArray(),
-                    null // 域名，null表示使用默认
+                // 创建连接
+                connection = client.connect(
+                    config.serverAddress,
+                    config.port
                 )
+
+                // 创建认证上下文
+                val authContext = if (config.isAnonymous) {
+                    // 匿名登录：使用 Guest 用户和空密码
+                    // 大多数 SMB 服务器使用 Guest 用户来实现匿名访问
+                    Log.d(TAG, "使用匿名登录（Guest 用户，空密码）")
+                    AuthenticationContext("Guest", "".toCharArray(), null)
+                } else {
+                    // 用户名密码登录，仅在调试构建中打印用户名，避免生产日志泄露凭据
+                    if (BuildConfig.DEBUG) Log.d(TAG, "使用用户名密码登录: ${config.username}")
+                    AuthenticationContext(
+                        config.username,
+                        config.password.toCharArray(),
+                        null // 域名，null表示使用默认
+                    )
+                }
+
+                // 建立会话
+                session = connection!!.authenticate(authContext)
+
+                // 打开共享文件夹
+                diskShare = session!!.connectShare(config.shareName) as DiskShare
+
+                return diskShare!!
+            } catch (e: Exception) {
+                Log.e(TAG, "========== 连接SMB服务器失败 ==========")
+                Log.e(TAG, "错误类型: ${e.javaClass.simpleName}")
+                Log.e(TAG, "错误消息: ${e.message}")
+                Log.e(TAG, "服务器地址: ${config.serverAddress}:${config.port}")
+                Log.e(TAG, "共享名称: ${config.shareName}")
+                Log.e(TAG, "匿名登录: ${config.isAnonymous}")
+                Log.e(TAG, "错误堆栈:", e)
+                disconnectLocked()
+                throw IOException("连接SMB服务器失败: ${e.message}", e)
             }
-
-            // 建立会话
-            session = connection!!.authenticate(authContext)
-
-            // 打开共享文件夹
-            diskShare = session!!.connectShare(config.shareName) as DiskShare
-
-            return diskShare!!
-        } catch (e: Exception) {
-            Log.e(TAG, "========== 连接SMB服务器失败 ==========")
-            Log.e(TAG, "错误类型: ${e.javaClass.simpleName}")
-            Log.e(TAG, "错误消息: ${e.message}")
-            Log.e(TAG, "服务器地址: ${config.serverAddress}:${config.port}")
-            Log.e(TAG, "共享名称: ${config.shareName}")
-            Log.e(TAG, "匿名登录: ${config.isAnonymous}")
-            Log.e(TAG, "错误堆栈:", e)
-            disconnect()
-            throw IOException("连接SMB服务器失败: ${e.message}", e)
         }
     }
 
@@ -73,17 +76,19 @@ class SMBConnectionManager {
      * 获取当前活动的共享连接
      */
     fun getDiskShare(): DiskShare? {
-        return diskShare
+        return synchronized(connectionLock) { diskShare }
     }
 
     /**
      * 检查连接是否有效
      */
     fun isConnected(): Boolean {
-        return try {
-            diskShare?.isConnected == true
-        } catch (e: Exception) {
-            false
+        return synchronized(connectionLock) {
+            try {
+                diskShare?.isConnected == true
+            } catch (e: Exception) {
+                false
+            }
         }
     }
 
@@ -91,6 +96,12 @@ class SMBConnectionManager {
      * 断开连接
      */
     fun disconnect() {
+        synchronized(connectionLock) {
+            disconnectLocked()
+        }
+    }
+
+    private fun disconnectLocked() {
         try {
             diskShare?.close()
         } catch (e: Exception) {
@@ -207,4 +218,3 @@ class SMBConnectionManager {
         }
     }
 }
-

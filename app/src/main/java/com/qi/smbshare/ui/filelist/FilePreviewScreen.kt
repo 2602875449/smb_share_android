@@ -97,7 +97,7 @@ fun FilePreviewScreen(
                 }
 
                 is PreviewState.ImageReady -> {
-                    ZoomableImage(bytes = previewState.bytes)
+                    ZoomableImage(cacheFile = previewState.cacheFile)
                 }
 
                 is PreviewState.TextReady -> {
@@ -203,10 +203,10 @@ private fun VideoPreview(cacheFile: java.io.File) {
 
 /**
  * 支持双指缩放的图片展示区域。
- * 使用 Coil 从内存字节解码，避免二次网络请求。
+ * 使用 Coil 从本地缓存文件解码，避免大图一次性读入 JVM 内存。
  */
 @Composable
-private fun ZoomableImage(bytes: ByteArray) {
+private fun ZoomableImage(cacheFile: java.io.File) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -232,7 +232,7 @@ private fun ZoomableImage(bytes: ByteArray) {
     ) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(bytes)
+                .data(cacheFile)
                 .crossfade(true)
                 .build(),
             contentDescription = null,

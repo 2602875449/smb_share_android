@@ -1,13 +1,14 @@
 package com.qi.smbshare.ui.filelist
 
 import com.qi.smbshare.data.model.FileItem
+import java.io.File
 
 /** 文件预览的加载状态 */
 sealed class PreviewState {
     object Idle : PreviewState()
     object Loading : PreviewState()
-    /** 图片预览：持有从 SMB 读取到的原始字节 */
-    data class ImageReady(val bytes: ByteArray) : PreviewState()
+    /** 图片预览：持有本地缓存文件，避免大图一次性读入 JVM 内存 */
+    data class ImageReady(val cacheFile: File) : PreviewState()
     /** 文本预览：持有解码后的字符串内容，isTruncated 表示是否因超限而截断 */
     data class TextReady(val content: String, val isTruncated: Boolean = false) : PreviewState()
     /**
@@ -19,7 +20,7 @@ sealed class PreviewState {
      * 视频就绪：本地临时缓存文件已写完，ExoPlayer 可直接读取。
      * 关闭预览或 ViewModel 销毁时由 ViewModel 负责删除该文件。
      */
-    data class VideoReady(val cacheFile: java.io.File) : PreviewState()
+    data class VideoReady(val cacheFile: File) : PreviewState()
     data class Error(val message: String) : PreviewState()
 }
 
@@ -47,4 +48,3 @@ data class FileListState(
         if (searchQuery.isBlank()) files
         else files.filter { it.name.contains(searchQuery, ignoreCase = true) }
 }
-
