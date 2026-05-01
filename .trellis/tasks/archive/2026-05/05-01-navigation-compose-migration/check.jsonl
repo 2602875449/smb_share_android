@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "检查任务应覆盖项目开发规范入口"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "验证 MainActivity、导航图和共享组件位置符合目录约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验证 Compose 返回、主题颜色、本地化和测试要求"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "检查是否产生重复导航/组件逻辑"}

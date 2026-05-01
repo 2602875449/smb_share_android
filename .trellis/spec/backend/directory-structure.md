@@ -150,6 +150,23 @@ viewModel.handleIntent(ConnectionIntent.StartDiscovery)
 - `app/src/main/java/com/qi/smbshare/ui/settings/SettingsScreen.kt`
 - `app/src/main/java/com/qi/smbshare/ui/transfer/TransferManagerScreen.kt`
 
+### 顶层导航
+
+将应用级 Navigation Compose 路由、底部导航和顶层页面组装放在 `ui/navigation/` 下，避免继续在 `MainActivity.kt` 中堆积页面切换状态。
+
+约定：
+
+- `MainActivity.kt` 只负责 Activity 生命周期、语言 context、主题读取和调用 `AppNavGraph`。
+- `AppNavGraph` 负责 `NavHost`、顶层 ViewModel 获取、运行时导航状态（例如当前 SMB 配置、文件页初始路径、编辑中的配置）以及顶层返回语义。
+- 底部导航相关组件放在 `ui/navigation/`，可跨入口复用的纯组件（例如带徽章图标）放在 `ui/components/`。
+- 不要把 SMB、传输、持久化或页面内部业务状态搬进导航层；导航层只接线 screen callback 和 route 切换。
+
+示例：
+
+- `app/src/main/java/com/qi/smbshare/ui/navigation/AppNavGraph.kt`
+- `app/src/main/java/com/qi/smbshare/ui/navigation/AppBottomNavigationBar.kt`
+- `app/src/main/java/com/qi/smbshare/ui/navigation/AppDestination.kt`
+
 ### 后台传输服务
 
 长时间运行的前台服务仍放在 `service/` 下，但单个上传/下载任务的具体执行逻辑应拆到 `service/transfer/` 辅助类中，避免 Service 同时承担生命周期、Intent 分发和流复制职责。

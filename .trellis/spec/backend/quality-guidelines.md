@@ -67,6 +67,24 @@
 - 手势取消时不触发业务返回。
 - 变更后至少运行 `./gradlew test assembleDebug`。
 
+### Navigation Compose 顶层导航
+
+当前应用的顶层页面切换由 `ui/navigation/AppNavGraph.kt` 中的 `NavHost` 管理。
+
+约定：
+
+- Activity 不直接维护 `selectedTab`、设置子页枚举或页面级 `when` 分发。
+- 顶层 route 只表示页面位置；`SMBConfig` 这类运行时对象继续由导航图内的 Compose state 保存并传给 screen/factory，不通过字符串 route 临时序列化。
+- 底部导航切换使用单一 helper 保持 `launchSingleTop`、`restoreState` 和顶层回栈策略一致。
+- 设置主页系统返回到连接管理页；隐私政策和关于页面通过 `PredictiveBackAnimatedContent` 返回设置主页。
+- 文件预览覆盖层可见时，导航图隐藏主底部导航；目录层级返回仍由 `FileListScreen` 自己处理。
+
+检查点：
+
+- `MainActivity.kt` 应保持薄入口，不重新引入 `AppContent` 或底部导航实现。
+- 新增顶层页面时，同时更新 `AppDestination`、`AppNavGraph` 和底部导航选择映射。
+- 迁移导航时不要顺手引入 Hilt、重构 Repository 或改变传输服务行为。
+
 ### 场景：图片与文本在线预览
 
 #### 1. Scope / Trigger

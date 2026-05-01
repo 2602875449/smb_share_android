@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Android/Kotlin 应用分层与开发前检查入口"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "导航图、共享 UI 组件和 Activity 职责迁移需要遵循目录边界"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Compose state、返回、主题、本地化和验证命令约束"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "迁移底部导航与徽章组件时避免重复实现"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "确认导航层与 ViewModel/数据层边界"}
