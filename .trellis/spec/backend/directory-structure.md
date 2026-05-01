@@ -94,6 +94,8 @@ Hilt 是当前生产代码的依赖注入入口。新增可共享依赖时，优
 - `SMBConnectionManager` 属于单个 ViewModel 的连接状态，不要做成应用级单例；同一个 ViewModel 内的 `ConnectSMBUseCase` 与 `SMBFileRepository` 应共享同一个 manager。
 - `FileListViewModel` 的 `SMBConfig` 和 `initialPath` 保持导航运行时状态，不序列化进 route；通过 Hilt Assisted Injection 创建。
 - `TransferService` 继续暴露原有 Intent action/extras，调用方仍通过 `TransferRepository` 启动或控制服务。
+- 后台传输使用 Service 生命周期内的 `ServiceSmbConnectionPool` 复用 SMB 连接；执行器不得默认自行创建 `SMBConnectionManager()`。
+- 暂停、恢复、取消优先通过数据库状态和已存在的 `TransferServiceController` 送达运行中的服务；暂停/取消不要为控制指令重复启动前台服务，恢复在服务不在时可走实际任务启动路径保持兼容。
 
 #### 4. Validation & Error Matrix
 
@@ -257,6 +259,8 @@ viewModel.handleIntent(ConnectionIntent.StartDiscovery)
 - `TransferStreamCopier.copy(inputStream, outputStream, task, direction, finalProgress)`
 - `TransferControl.waitWhilePaused(taskId)` / `ensureTaskNotCancelled(taskId)`
 - `TransferTaskUpdater.updateProgress(...)` / `updateTaskLocalPath(...)`
+- `ServiceSmbConnectionProvider.acquire(config)` / `release(config)` / `closeIdleConnections()` / `closeAll()`
+- `TransferServiceController.pause(taskId)` / `resume(taskId)` / `cancel(taskId)`
 
 #### 3. Contracts
 
@@ -265,6 +269,10 @@ viewModel.handleIntent(ConnectionIntent.StartDiscovery)
 - 下载执行器负责 `StorageHelper.createDownloadFileOutputStream()`、Android 10+ `finishDownloadFile()` 和本地路径更新。
 - 上传执行器负责普通路径与 `content://` URI 输入流打开，不先复制到缓存目录。
 - 执行器依赖通过构造函数传入；不要为了传输拆分迁移导航或改变 Hilt 接线范围。
+- `DownloadExecutor` / `UploadExecutor` 使用 `ServiceSmbConnectionProvider` 获取 `DiskShare`，任务结束只 `release(config)`；连接关闭由 Service 生命周期和空闲回收负责。
+- `TransferService` 内的任务 Job、配置、取消标记和暂停信号必须是线程安全结构或集中状态机。
+- 暂停等待必须由 `StateFlow`、`Channel` 或等价信号唤醒；不要在复制循环中固定 `delay(100)` 轮询暂停集合。
+- `TransferRepository.pauseTransfer/resumeTransfer/cancelTransfer` 先更新数据库状态，再通知已存在的服务；没有运行中的服务时，暂停/取消不启动新服务，恢复可按任务启动路径继续执行。
 
 #### 4. Validation & Error Matrix
 
@@ -276,8 +284,11 @@ viewModel.handleIntent(ConnectionIntent.StartDiscovery)
 #### 5. Good/Base/Bad Cases
 
 - Good：新增传输行为时扩展执行器或小型 helper，Service 只接线回调与调度。
+- Good：Service 级连接池按 `SMBConfig.id` 分桶复用连接，空闲且没有活动租约时才回收。
 - Base：只改通知或网络暂停策略时，变更留在 `TransferService`。
 - Bad：把 SMB `openFile`、本地输入流打开、流复制循环和进度计算重新写回 `TransferService`。
+- Bad：执行器构造参数默认 `SMBConnectionManager()`，导致后台任务绕过 Service 级连接池。
+- Bad：暂停等待写成 `while (paused) delay(100)`。
 
 #### 6. Tests Required
 
@@ -285,6 +296,8 @@ viewModel.handleIntent(ConnectionIntent.StartDiscovery)
 - 单测覆盖上传输入流普通路径、文件不存在和 `content://` 空流。
 - 单测覆盖传输读写异常到 `TransferException` 类型的映射。
 - 涉及真实 SMB 或 Android 存储的执行器路径优先通过依赖注入 fake 边界测试，不要求 JVM 单测连接真实 SMB。
+- 连接池单测覆盖同 config 复用、活动租约不被空闲回收、空闲连接可回收。
+- 控制指令单测覆盖 pause/cancel 更新数据库且不重复启动前台服务，以及 resume 在无现有服务时启动实际任务执行。
 
 #### 7. Wrong vs Correct
 
@@ -301,6 +314,22 @@ Correct：
 
 ```kotlin
 uploadExecutor.execute(task, config)
+```
+
+Wrong：
+
+```kotlin
+class DownloadExecutor(
+    private val connectionManagerFactory: () -> SMBConnectionManager = { SMBConnectionManager() }
+)
+```
+
+Correct：
+
+```kotlin
+class DownloadExecutor(
+    private val connectionProvider: ServiceSmbConnectionProvider
+)
 ```
 
 ### 共享 UI 与主题

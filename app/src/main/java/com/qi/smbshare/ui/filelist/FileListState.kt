@@ -1,6 +1,7 @@
 package com.qi.smbshare.ui.filelist
 
 import com.qi.smbshare.data.model.FileItem
+import com.qi.smbshare.util.ErrorHandler
 import java.io.File
 
 /** 文件预览的加载状态 */
@@ -32,6 +33,7 @@ data class FileListState(
     val isOperating: Boolean = false, // 用于单次操作（创建/删除/重命名）
     val isUploading: Boolean = false,
     val error: String? = null,
+    val connectionErrorType: ErrorHandler.AppErrorType? = null,
     val message: String? = null, // 成功消息提示
     val searchQuery: String = "", // 搜索关键词
     val isSearchActive: Boolean = false, // 是否正在搜索

@@ -8,6 +8,11 @@ import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
+data class TransferTaskStatusRow(
+    val id: String,
+    val status: String
+)
+
 /**
  * 传输任务数据访问对象
  * 提供数据库操作接口
@@ -20,6 +25,12 @@ interface TransferTaskDao {
      */
     @Query("SELECT * FROM transfer_tasks ORDER BY created_at DESC")
     fun getAllTasks(): Flow<List<TransferTaskEntity>>
+
+    /**
+     * 只观察服务控制所需的状态列，避免进度高频更新触发完整任务重分发。
+     */
+    @Query("SELECT id, status FROM transfer_tasks")
+    fun getTaskStatusRows(): Flow<List<TransferTaskStatusRow>>
     
     /**
      * 获取活动的传输任务（等待中、进行中、已暂停）

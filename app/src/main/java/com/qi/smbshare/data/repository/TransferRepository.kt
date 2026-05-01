@@ -9,11 +9,14 @@ import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.model.TransferStatus
 import com.qi.smbshare.data.model.TransferTask
 import com.qi.smbshare.data.model.TransferType
+import com.qi.smbshare.service.TransferService
+import com.qi.smbshare.service.TransferServiceController
 import com.qi.smbshare.util.toJsonString
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 
@@ -32,6 +35,14 @@ class TransferRepository @Inject constructor(
      */
     val allTasks: Flow<List<TransferTask>> = taskDao.getAllTasks()
         .map { entities -> entities.map { it.toModel() } }
+
+    val taskStatuses: Flow<Map<String, TransferStatus>> = taskDao.getTaskStatusRows()
+        .map { rows ->
+            rows.mapNotNull { row ->
+                runCatching { row.id to TransferStatus.valueOf(row.status) }.getOrNull()
+            }.toMap()
+        }
+        .distinctUntilChanged()
     
     /**
      * 获取活动传输任务数量的 Flow
@@ -163,7 +174,7 @@ class TransferRepository @Inject constructor(
         taskDao.updateTask(updatedTask.toEntity())
         
         // 通知传输服务暂停任务
-        notifyTransferService(com.qi.smbshare.service.TransferService.ACTION_PAUSE_TRANSFER, taskId)
+        TransferServiceController.pause(taskId)
     }
     
     /**
@@ -189,8 +200,10 @@ class TransferRepository @Inject constructor(
         
         taskDao.updateTask(updatedTask.toEntity())
         
-        // 通知传输服务恢复任务
-        notifyTransferService(com.qi.smbshare.service.TransferService.ACTION_RESUME_TRANSFER, taskId)
+        // 优先交给已存在的服务；服务不在时按任务启动路径恢复执行，避免只改 DB 后无人传输。
+        if (!TransferServiceController.resume(taskId)) {
+            startTransferService(taskId, updatedTask.config)
+        }
     }
     
     /**
@@ -218,7 +231,7 @@ class TransferRepository @Inject constructor(
         taskDao.updateTask(updatedTask.toEntity())
         
         // 通知传输服务取消任务
-        notifyTransferService(com.qi.smbshare.service.TransferService.ACTION_CANCEL_TRANSFER, taskId)
+        TransferServiceController.cancel(taskId)
     }
     
     /**
@@ -418,26 +431,13 @@ class TransferRepository @Inject constructor(
     }
     
     /**
-     * 通知传输服务执行操作
-     * 用于暂停、恢复、取消等操作
-     */
-    private fun notifyTransferService(action: String, taskId: String) {
-        val intent = Intent(context, com.qi.smbshare.service.TransferService::class.java).apply {
-            this.action = action
-            putExtra(com.qi.smbshare.service.TransferService.EXTRA_TASK_ID, taskId)
-        }
-
-        context.startForegroundService(intent)
-    }
-    
-    /**
      * 启动传输服务执行指定任务
      */
     private fun startTransferService(taskId: String, config: SMBConfig) {
-        val intent = Intent(context, com.qi.smbshare.service.TransferService::class.java).apply {
-            action = com.qi.smbshare.service.TransferService.ACTION_START_TRANSFER
-            putExtra(com.qi.smbshare.service.TransferService.EXTRA_TASK_ID, taskId)
-            putExtra(com.qi.smbshare.service.TransferService.EXTRA_CONFIG, config.toJsonString())
+        val intent = Intent(context, TransferService::class.java).apply {
+            action = TransferService.ACTION_START_TRANSFER
+            putExtra(TransferService.EXTRA_TASK_ID, taskId)
+            putExtra(TransferService.EXTRA_CONFIG, config.toJsonString())
         }
 
         context.startForegroundService(intent)

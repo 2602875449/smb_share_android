@@ -1,5 +1,6 @@
 package com.qi.smbshare.util
 
+import com.qi.smbshare.R
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,6 +20,7 @@ class ErrorHandlerTest {
     fun `SocketTimeoutException 归类为 NetworkError`() {
         val error = ErrorHandler.handleException(SocketTimeoutException("timeout"))
         assertTrue(error is ErrorHandler.AppError.NetworkError)
+        assertTrue(error.type == ErrorHandler.AppErrorType.NETWORK)
     }
 
     @Test
@@ -49,6 +51,7 @@ class ErrorHandlerTest {
     fun `IOException 含 Authentication 关键字时归类为 AuthenticationError`() {
         val error = ErrorHandler.handleException(IOException("Authentication failed"))
         assertTrue(error is ErrorHandler.AppError.AuthenticationError)
+        assertTrue(error.type == ErrorHandler.AppErrorType.AUTHENTICATION)
     }
 
     @Test
@@ -75,6 +78,20 @@ class ErrorHandlerTest {
     fun `IOException 含 refused 关键字时归类为 NetworkError`() {
         val error = ErrorHandler.handleException(IOException("connection refused"))
         assertTrue(error is ErrorHandler.AppError.NetworkError)
+    }
+
+    @Test
+    fun `IOException 含未连接关键字时归类为 NetworkError`() {
+        val error = ErrorHandler.handleException(IOException("未连接到SMB服务器"))
+        assertTrue(error is ErrorHandler.AppError.NetworkError)
+        assertTrue(error.type == ErrorHandler.AppErrorType.NETWORK)
+    }
+
+    @Test
+    fun `IOException 含连接失败关键字时归类为 NetworkError`() {
+        val error = ErrorHandler.handleException(IOException("连接SMB服务器失败: closed"))
+        assertTrue(error is ErrorHandler.AppError.NetworkError)
+        assertTrue(error.type == ErrorHandler.AppErrorType.NETWORK)
     }
 
     @Test
@@ -111,8 +128,12 @@ class ErrorHandlerTest {
     }
 
     @Test
-    fun `FileOperationError 含 不存在 时不可重试`() {
-        assertFalse(ErrorHandler.isRetryable(ErrorHandler.AppError.FileOperationError(0, "文件不存在")))
+    fun `FileOperationError 使用文件不存在资源时不可重试`() {
+        assertFalse(
+            ErrorHandler.isRetryable(
+                ErrorHandler.AppError.FileOperationError(R.string.error_file_not_found, "文件不存在")
+            )
+        )
     }
 
     // ==================== 便捷方法测试 ====================

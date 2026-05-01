@@ -21,9 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -58,11 +55,8 @@ fun AppNavGraph(
     onInstallApk: (File) -> Unit
 ) {
     val navController = rememberNavController()
-    var currentConfig by remember { mutableStateOf<SMBConfig?>(null) }
-    var editConfig by remember { mutableStateOf<SMBConfig?>(null) }
-    var initialPath by remember { mutableStateOf("") }
-    var isFilePreviewVisible by remember { mutableStateOf(false) }
 
+    val appNavigationViewModel: AppNavigationViewModel = hiltViewModel()
     val connectionViewModel: ConnectionViewModel = hiltViewModel()
     val transferManagerViewModel: TransferManagerViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
@@ -81,15 +75,18 @@ fun AppNavGraph(
     }
     val isChinese = currentLocale.language == "zh"
 
+    val appNavigationState by appNavigationViewModel.state.collectAsStateWithLifecycle()
     val transferState by transferManagerViewModel.state.collectAsStateWithLifecycle()
     val connectionState by connectionViewModel.state.collectAsStateWithLifecycle()
+    val currentConfig = appNavigationState.currentConfig
+    val editConfig = appNavigationState.editConfig
+    val initialPath = appNavigationState.initialPath
+    val isFilePreviewVisible = appNavigationState.isFilePreviewVisible
     val activeTransferCount = transferState.activeTransferCount
 
     LaunchedEffect(connectionState.restoredLastAccess) {
         connectionState.restoredLastAccess?.let { restored ->
-            currentConfig = restored.config
-            initialPath = restored.path
-            isFilePreviewVisible = false
+            appNavigationViewModel.restoreFiles(restored.config, restored.path)
             navController.navigateTopLevel(AppDestination.FileList.route)
             connectionViewModel.handleIntent(ConnectionIntent.ClearRestoredLastAccess)
         }
@@ -97,7 +94,7 @@ fun AppNavGraph(
 
     LaunchedEffect(currentRoute, currentConfig) {
         if (currentRoute != AppDestination.FileList.route || currentConfig == null) {
-            isFilePreviewVisible = false
+            appNavigationViewModel.setPreviewVisible(false)
         }
     }
 
@@ -118,7 +115,7 @@ fun AppNavGraph(
                     isFileEnabled = currentConfig != null,
                     isChinese = isChinese,
                     onSelectTab = { tab ->
-                        isFilePreviewVisible = false
+                        appNavigationViewModel.setPreviewVisible(false)
                         when (tab) {
                             NavigationTab.CONNECTION -> {
                                 navController.navigateTopLevel(AppDestination.Connection.route)
@@ -149,14 +146,11 @@ fun AppNavGraph(
                     ConnectionScreen(
                         viewModel = connectionViewModel,
                         onNavigateToFileList = { config ->
-                            currentConfig = config
-                            initialPath = ""
-                            isFilePreviewVisible = false
+                            appNavigationViewModel.showFiles(config)
                             navController.navigateTopLevel(AppDestination.FileList.route)
                         },
                         onNavigateToEdit = { config ->
-                            editConfig = config
-                            isFilePreviewVisible = false
+                            appNavigationViewModel.startEditing(config)
                             navController.navigate(AppDestination.EditConnection.route) {
                                 launchSingleTop = true
                             }
@@ -171,18 +165,16 @@ fun AppNavGraph(
                         viewModel = connectionViewModel,
                         configToEdit = editConfig,
                         onBack = {
-                            editConfig = null
+                            appNavigationViewModel.clearEditing()
                             navController.popBackStack()
                         },
                         onSaveSuccess = {
-                            editConfig = null
+                            appNavigationViewModel.clearEditing()
                             navController.popBackStack()
                         },
                         onConnectSuccess = { config ->
-                            editConfig = null
-                            currentConfig = config
-                            initialPath = ""
-                            isFilePreviewVisible = false
+                            appNavigationViewModel.clearEditing()
+                            appNavigationViewModel.showFiles(config)
                             navController.navigateTopLevel(AppDestination.FileList.route)
                         }
                     )
@@ -192,17 +184,15 @@ fun AppNavGraph(
                     if (config != null) {
                         val fileListViewModel: FileListViewModel =
                             hiltViewModel<FileListViewModel, FileListViewModel.Factory>(
-                                key = "${config.id}_$initialPath"
+                                key = "${config.id}_${initialPath}_${config.navigationCredentialStateKey()}"
                             ) { factory ->
                                 factory.create(config, initialPath)
                             }
                         val state by fileListViewModel.state.collectAsStateWithLifecycle()
 
-                        LaunchedEffect(state.error) {
-                            if (state.error != null && state.error!!.contains("连接失败")) {
-                                currentConfig = null
-                                initialPath = ""
-                                isFilePreviewVisible = false
+                        LaunchedEffect(state.connectionErrorType) {
+                            if (state.connectionErrorType != null) {
+                                appNavigationViewModel.clearCurrentConnection()
                                 navController.navigateToConnectionAndClear()
                             }
                         }
@@ -212,13 +202,11 @@ fun AppNavGraph(
                             onInstallApk = onInstallApk,
                             config = config,
                             onBack = {
-                                currentConfig = null
-                                initialPath = ""
-                                isFilePreviewVisible = false
+                                appNavigationViewModel.clearCurrentConnection()
                                 navController.navigateToConnectionAndClear()
                             },
                             onPreviewVisibilityChange = { visible ->
-                                isFilePreviewVisible = visible
+                                appNavigationViewModel.setPreviewVisible(visible)
                             }
                         )
                     } else {
@@ -237,7 +225,7 @@ fun AppNavGraph(
                 }
                 composable(AppDestination.Settings.route) {
                     BackHandler {
-                        isFilePreviewVisible = false
+                        appNavigationViewModel.setPreviewVisible(false)
                         navController.navigateTopLevel(AppDestination.Connection.route)
                     }
                     SettingsScreen(
@@ -323,5 +311,13 @@ private fun androidx.navigation.NavHostController.navigateToConnectionAndClear()
             inclusive = false
         }
         launchSingleTop = true
+    }
+}
+
+private fun SMBConfig.navigationCredentialStateKey(): String {
+    return if (isAnonymous || password.isNotEmpty()) {
+        "credentials-ready"
+    } else {
+        "credentials-empty"
     }
 }

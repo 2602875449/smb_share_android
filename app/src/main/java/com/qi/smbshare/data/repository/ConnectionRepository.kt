@@ -5,6 +5,7 @@ import com.qi.smbshare.data.model.SMBConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 @Singleton
 class ConnectionRepository @Inject constructor(
@@ -15,6 +16,13 @@ class ConnectionRepository @Inject constructor(
      */
     fun getSavedConfigs(): Flow<List<SMBConfig>> {
         return dataStoreManager.savedConfigs
+    }
+
+    /**
+     * 通过配置 ID 读取完整配置，用于从非敏感导航快照恢复运行时凭据。
+     */
+    suspend fun getConfigById(configId: String): SMBConfig? {
+        return dataStoreManager.savedConfigs.first().firstOrNull { it.id == configId }
     }
 
     /**

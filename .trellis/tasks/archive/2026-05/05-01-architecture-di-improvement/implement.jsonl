@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "总览本项目数据、服务、持久化和 UI 状态相关规范入口"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "确定连接池、错误模型、导航状态 ViewModel 等新代码放置边界"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Room Migration、schema 导出和数据库测试需要遵循持久化规范"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "将字符串错误判断迁移为领域错误类型时需要遵循现有错误处理规范"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Compose 状态、测试和验证命令需要遵循质量规范"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "SMB 连接池和迁移日志不能泄露敏感信息"}

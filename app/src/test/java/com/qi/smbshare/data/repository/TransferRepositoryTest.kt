@@ -11,11 +11,18 @@ import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.model.TransferStatus
 import com.qi.smbshare.data.model.TransferTask
 import com.qi.smbshare.data.model.TransferType
+import com.qi.smbshare.service.TransferServiceControl
+import com.qi.smbshare.service.TransferServiceController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -152,6 +159,146 @@ class TransferRepositoryTest {
         assertEquals(TransferStatus.ACTIVE.name, updated.status)
     }
 
+    @Test
+    fun `taskStatuses should remain unchanged when only progress changes`() = runTest {
+        val task = TransferTask(
+            id = "status-only",
+            type = TransferType.DOWNLOAD,
+            fileName = "status-only.bin",
+            fileSize = 1_000L,
+            remotePath = "\\\\nas\\status-only.bin",
+            localPath = "/tmp/status-only.bin",
+            config = sampleConfig(),
+            status = TransferStatus.ACTIVE
+        )
+        dao.insertTask(task.toEntity())
+
+        val before = repository.taskStatuses.first()
+        repository.updateProgress(
+            taskId = task.id,
+            progress = 20,
+            transferredBytes = 200,
+            speed = 100
+        )
+        val after = repository.taskStatuses.first()
+
+        assertEquals(before, after)
+    }
+
+    @Test
+    fun `taskStatuses should not emit a new value when only progress changes`() = runTest {
+        val task = TransferTask(
+            id = "status-emission",
+            type = TransferType.DOWNLOAD,
+            fileName = "status-emission.bin",
+            fileSize = 1_000L,
+            remotePath = "\\\\nas\\status-emission.bin",
+            localPath = "/tmp/status-emission.bin",
+            config = sampleConfig(),
+            status = TransferStatus.ACTIVE
+        )
+        dao.insertTask(task.toEntity())
+
+        val nextStatusEmission = async {
+            withTimeoutOrNull(300) {
+                repository.taskStatuses.drop(1).first()
+            }
+        }
+
+        repository.updateProgress(
+            taskId = task.id,
+            progress = 20,
+            transferredBytes = 200,
+            speed = 100
+        )
+
+        assertNull("进度更新不应触发服务控制状态重新分发", nextStatusEmission.await())
+    }
+
+    @Test
+    fun `pause and cancel should update database without starting foreground service`() = runTest {
+        val activeTask = TransferTask(
+            id = "control-1",
+            type = TransferType.DOWNLOAD,
+            fileName = "control.bin",
+            fileSize = 1_000L,
+            remotePath = "\\\\nas\\control.bin",
+            localPath = "/tmp/control.bin",
+            config = sampleConfig(),
+            status = TransferStatus.ACTIVE
+        )
+        val service = RecordingTransferServiceControl()
+        dao.insertTask(activeTask.toEntity())
+        context.clearStartedServices()
+        TransferServiceController.register(service)
+
+        try {
+            repository.pauseTransfer(activeTask.id)
+            assertEquals(TransferStatus.PAUSED.name, dao.getTaskById(activeTask.id)!!.status)
+
+            repository.cancelTransfer(activeTask.id)
+            assertEquals(TransferStatus.CANCELLED.name, dao.getTaskById(activeTask.id)!!.status)
+            assertEquals(listOf(activeTask.id), service.pausedTaskIds)
+            assertEquals(listOf(activeTask.id), service.cancelledTaskIds)
+            assertEquals("控制指令不应重复启动前台服务", 0, context.startedIntents.size)
+        } finally {
+            TransferServiceController.unregister(service)
+        }
+    }
+
+    @Test
+    fun `resume should use existing service when possible and otherwise start task execution`() = runTest {
+        val pausedTask = TransferTask(
+            id = "resume-1",
+            type = TransferType.DOWNLOAD,
+            fileName = "resume.bin",
+            fileSize = 1_000L,
+            remotePath = "\\\\nas\\resume.bin",
+            localPath = "/tmp/resume.bin",
+            config = sampleConfig(),
+            status = TransferStatus.PAUSED
+        )
+        dao.insertTask(pausedTask.toEntity())
+        context.clearStartedServices()
+
+        repository.resumeTransfer(pausedTask.id)
+
+        assertEquals(TransferStatus.ACTIVE.name, dao.getTaskById(pausedTask.id)!!.status)
+        assertEquals("服务不在时恢复应启动实际任务执行", 1, context.startedIntents.size)
+        assertEquals(
+            com.qi.smbshare.service.TransferService.ACTION_START_TRANSFER,
+            context.startedIntents.first().action
+        )
+    }
+
+    @Test
+    fun `resume should notify existing service without starting foreground service`() = runTest {
+        val pausedTask = TransferTask(
+            id = "resume-existing",
+            type = TransferType.DOWNLOAD,
+            fileName = "resume-existing.bin",
+            fileSize = 1_000L,
+            remotePath = "\\\\nas\\resume-existing.bin",
+            localPath = "/tmp/resume-existing.bin",
+            config = sampleConfig(),
+            status = TransferStatus.PAUSED
+        )
+        val service = RecordingTransferServiceControl()
+        dao.insertTask(pausedTask.toEntity())
+        context.clearStartedServices()
+        TransferServiceController.register(service)
+
+        try {
+            repository.resumeTransfer(pausedTask.id)
+
+            assertEquals(TransferStatus.ACTIVE.name, dao.getTaskById(pausedTask.id)!!.status)
+            assertEquals(listOf(pausedTask.id), service.resumedTaskIds)
+            assertEquals("已有服务时恢复不应重复启动前台服务", 0, context.startedIntents.size)
+        } finally {
+            TransferServiceController.unregister(service)
+        }
+    }
+
     private fun sampleConfig(): SMBConfig {
         return SMBConfig(
             serverAddress = "192.168.0.100",
@@ -175,6 +322,24 @@ class TransferRepositoryTest {
 
         fun clearStartedServices() {
             startedIntents.clear()
+        }
+    }
+
+    private class RecordingTransferServiceControl : TransferServiceControl {
+        val pausedTaskIds = mutableListOf<String>()
+        val resumedTaskIds = mutableListOf<String>()
+        val cancelledTaskIds = mutableListOf<String>()
+
+        override fun pauseTransfer(taskId: String) {
+            pausedTaskIds.add(taskId)
+        }
+
+        override fun resumeTransfer(taskId: String) {
+            resumedTaskIds.add(taskId)
+        }
+
+        override fun cancelTransfer(taskId: String) {
+            cancelledTaskIds.add(taskId)
         }
     }
 }

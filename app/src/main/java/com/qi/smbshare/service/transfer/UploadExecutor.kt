@@ -5,7 +5,6 @@ import android.util.Log
 import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2ShareAccess
-import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.model.TransferTask
 import kotlinx.coroutines.CancellationException
@@ -16,17 +15,16 @@ private const val UPLOAD_TAG = "UploadExecutor"
 class UploadExecutor(
     context: Context,
     private val streamCopier: TransferStreamCopier,
-    private val inputStreamProvider: UploadInputStreamProvider = UploadInputStreamProvider(context),
-    private val connectionManagerFactory: () -> SMBConnectionManager = { SMBConnectionManager() }
+    private val connectionProvider: ServiceSmbConnectionProvider,
+    private val inputStreamProvider: UploadInputStreamProvider = UploadInputStreamProvider(context)
 ) {
     suspend fun execute(task: TransferTask, config: SMBConfig) {
         Log.d(UPLOAD_TAG, "开始上传: ${task.fileName}")
 
-        val smbManager = connectionManagerFactory()
         var remoteFile: SMBFile? = null
 
         try {
-            val diskShare = smbManager.connect(config)
+            val diskShare = connectionProvider.acquire(config)
             val normalizedPath = TransferPathUtils.normalizeSmbPath(task.remotePath)
             Log.d(UPLOAD_TAG, "打开远程文件用于上传: $normalizedPath")
             remoteFile = diskShare.openFile(
@@ -69,11 +67,7 @@ class UploadExecutor(
             } catch (e: Exception) {
                 Log.w(UPLOAD_TAG, "关闭远程文件时出错: ${e.message}")
             }
-            try {
-                smbManager.disconnect()
-            } catch (e: Exception) {
-                Log.w(UPLOAD_TAG, "断开连接时出错: ${e.message}")
-            }
+            connectionProvider.release(config)
         }
     }
 }

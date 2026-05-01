@@ -87,7 +87,7 @@ class FileListViewModel @AssistedInject constructor(
                 downloadFile(intent.filePath, intent.fileName)
             }
             is FileListIntent.ClearError -> {
-                _state.value = _state.value.copy(error = null)
+                _state.value = _state.value.copy(error = null, connectionErrorType = null)
             }
             is FileListIntent.ClearMessage -> {
                 _state.value = _state.value.copy(message = null)
@@ -172,9 +172,11 @@ class FileListViewModel @AssistedInject constructor(
                 }
                 .onFailure { e ->
                     val errorMessage = formatError(e, R.string.error_connect_failed)
+                    val errorType = classifyErrorType(e)
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        error = errorMessage
+                        error = errorMessage,
+                        connectionErrorType = errorType.takeIf { shouldReturnToConnection(it) }
                     )
                 }
         }
@@ -195,14 +197,20 @@ class FileListViewModel @AssistedInject constructor(
 
     private fun loadFiles() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, error = null)
+            _state.value = _state.value.copy(
+                isLoading = true,
+                error = null,
+                connectionErrorType = null
+            )
 
             ensureConnected()
                 .onFailure { e ->
                     val errorMessage = formatError(e, R.string.error_reconnect_failed)
+                    val errorType = classifyErrorType(e)
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        error = errorMessage
+                        error = errorMessage,
+                        connectionErrorType = errorType.takeIf { shouldReturnToConnection(it) }
                     )
                     return@launch
                 }
@@ -243,13 +251,7 @@ class FileListViewModel @AssistedInject constructor(
     }
 
     private fun shouldReconnectAndRetry(error: Throwable?): Boolean {
-        val message = error?.message.orEmpty()
-        val causeMessage = error?.cause?.message.orEmpty()
-        return listOf(message, causeMessage).any { text ->
-            text.contains("closed", ignoreCase = true) ||
-                text.contains("未连接", ignoreCase = true) ||
-                text.contains("connection", ignoreCase = true)
-        }
+        return classifyErrorType(error) == ErrorHandler.AppErrorType.NETWORK
     }
 
     private fun enterDirectory(path: String) {
@@ -730,6 +732,17 @@ class FileListViewModel @AssistedInject constructor(
         } else {
             text(fallbackResId)
         }
+    }
+
+    private fun classifyErrorType(error: Throwable?): ErrorHandler.AppErrorType? {
+        return (error as? Exception)
+            ?.let { ErrorHandler.handleException(it).type }
+            ?: ErrorHandler.AppErrorType.UNKNOWN
+    }
+
+    private fun shouldReturnToConnection(errorType: ErrorHandler.AppErrorType?): Boolean {
+        return errorType == ErrorHandler.AppErrorType.NETWORK ||
+            errorType == ErrorHandler.AppErrorType.AUTHENTICATION
     }
 
     override fun onCleared() {

@@ -13,37 +13,46 @@ import java.net.UnknownHostException
  * 负责将异常转换为用户友好的错误消息
  */
 object ErrorHandler {
+
+    enum class AppErrorType {
+        NETWORK,
+        AUTHENTICATION,
+        PERMISSION,
+        FILE_OPERATION,
+        UNKNOWN
+    }
     
     /**
      * 应用错误类型
      */
     sealed class AppError(
+        val type: AppErrorType,
         @param:StringRes val messageResId: Int,
         val fallbackMessage: String
     ) {
         data class NetworkError(
             @param:StringRes val resId: Int,
             val message: String
-        ) : AppError(resId, message)
+        ) : AppError(AppErrorType.NETWORK, resId, message)
 
         data class AuthenticationError(
             @param:StringRes val resId: Int,
             val message: String
-        ) : AppError(resId, message)
+        ) : AppError(AppErrorType.AUTHENTICATION, resId, message)
 
         data class PermissionError(
             @param:StringRes val resId: Int,
             val message: String
-        ) : AppError(resId, message)
+        ) : AppError(AppErrorType.PERMISSION, resId, message)
 
         data class FileOperationError(
             @param:StringRes val resId: Int,
             val message: String
-        ) : AppError(resId, message)
+        ) : AppError(AppErrorType.FILE_OPERATION, resId, message)
 
         data class UnknownError(
             val detail: String
-        ) : AppError(R.string.error_operation_failed, "操作失败，请稍后重试")
+        ) : AppError(AppErrorType.UNKNOWN, R.string.error_operation_failed, "操作失败，请稍后重试")
     }
     
     /**
@@ -110,7 +119,14 @@ object ErrorHandler {
                             "没有存储权限，无法完成操作"
                         )
                     }
-                    containsKeyword("Network", "网络") -> {
+                    containsKeyword(
+                        "Network",
+                        "网络",
+                        "连接SMB服务器失败",
+                        "连接失败",
+                        "未连接",
+                        "closed"
+                    ) -> {
                         AppError.NetworkError(
                             R.string.error_network_unavailable,
                             "网络连接不可用，请检查网络设置"
@@ -164,7 +180,11 @@ object ErrorHandler {
                         )
                     }
                     message.contains("network", ignoreCase = true) ||
-                    message.contains("网络", ignoreCase = true) -> {
+                    message.contains("网络", ignoreCase = true) ||
+                    message.contains("连接SMB服务器失败", ignoreCase = true) ||
+                    message.contains("连接失败", ignoreCase = true) ||
+                    message.contains("未连接", ignoreCase = true) ||
+                    message.contains("closed", ignoreCase = true) -> {
                         AppError.NetworkError(
                             R.string.error_network_unavailable,
                             "网络连接不可用，请检查网络设置"
@@ -217,8 +237,7 @@ object ErrorHandler {
             is AppError.NetworkError -> true  // 网络错误可以重试
             is AppError.FileOperationError -> {
                 // 文件操作错误，除了文件不存在，其他可以重试
-                !error.message.contains("不存在", ignoreCase = true) &&
-                !error.message.contains("not exist", ignoreCase = true)
+                error.messageResId != R.string.error_file_not_found
             }
             is AppError.AuthenticationError -> false  // 认证错误需要修改配置，不能直接重试
             is AppError.PermissionError -> false  // 权限错误需要用户授权，不能直接重试

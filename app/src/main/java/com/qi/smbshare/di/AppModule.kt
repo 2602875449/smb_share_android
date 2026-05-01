@@ -32,7 +32,7 @@ object AppModule {
             TransferDatabase::class.java,
             "transfer_database"
         )
-            .fallbackToDestructiveMigration(true) // 保持现有开发阶段迁移策略，避免 DI 接入改变数据库行为。
+            .addMigrations(*TransferDatabase.MIGRATIONS)
             .build()
     }
 

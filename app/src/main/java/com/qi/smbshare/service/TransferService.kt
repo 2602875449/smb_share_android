@@ -24,6 +24,7 @@ import com.qi.smbshare.data.model.TransferType
 import com.qi.smbshare.data.repository.TransferRepository
 import com.qi.smbshare.service.transfer.DownloadExecutor
 import com.qi.smbshare.service.transfer.RepositoryTransferTaskUpdater
+import com.qi.smbshare.service.transfer.ServiceSmbConnectionPool
 import com.qi.smbshare.service.transfer.TransferControl
 import com.qi.smbshare.service.transfer.TransferDirection
 import com.qi.smbshare.service.transfer.TransferErrorType
@@ -34,6 +35,7 @@ import com.qi.smbshare.service.transfer.UploadExecutor
 import com.qi.smbshare.util.toSMBConfigOrNull
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +44,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlin.coroutines.coroutineContext
@@ -52,7 +56,7 @@ import kotlin.coroutines.coroutineContext
  * 使用前台服务确保长时间运行不被系统杀死
  */
 @AndroidEntryPoint
-class TransferService : Service() {
+class TransferService : Service(), TransferServiceControl {
 
     companion object {
         private const val TAG = "TransferService"
@@ -79,6 +83,7 @@ class TransferService : Service() {
     }
     
     @Inject lateinit var repository: TransferRepository
+    @Inject lateinit var connectionPool: ServiceSmbConnectionPool
     private lateinit var notificationManager: NotificationManager
     private lateinit var downloadExecutor: DownloadExecutor
     private lateinit var uploadExecutor: UploadExecutor
@@ -88,16 +93,16 @@ class TransferService : Service() {
     private val transferSemaphore = Semaphore(MAX_CONCURRENT_TRANSFERS)
     
     // 活动传输任务的 Job 映射
-    private val activeTransferJobs = mutableMapOf<String, Job>()
+    private val activeTransferJobs = ConcurrentHashMap<String, Job>()
     
-    // 暂停标志映射
-    private val pausedTasks = mutableSetOf<String>()
+    // 暂停状态使用 StateFlow 唤醒等待中的传输循环，避免固定轮询。
+    private val pausedSignals = ConcurrentHashMap<String, MutableStateFlow<Boolean>>()
 
     // 取消标志映射
-    private val cancelledTasks = mutableSetOf<String>()
+    private val cancelledTasks = ConcurrentHashMap.newKeySet<String>()
     
     // 任务配置映射（存储每个任务的 SMBConfig）
-    private val taskConfigs = mutableMapOf<String, SMBConfig>()
+    private val taskConfigs = ConcurrentHashMap<String, SMBConfig>()
     
     // 网络状态监听
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -105,6 +110,7 @@ class TransferService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "TransferService onCreate")
+        TransferServiceController.register(this)
 
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         setupTransferExecutors()
@@ -122,6 +128,7 @@ class TransferService : Service() {
             startForeground(NOTIFICATION_ID, createNotification())
         }
         registerNetworkCallback()
+        observeTaskStateChanges()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -146,19 +153,19 @@ class TransferService : Service() {
                 ACTION_PAUSE_TRANSFER -> {
                     val taskId = it.getStringExtra(EXTRA_TASK_ID)
                     if (taskId != null) {
-                        pauseTransfer(taskId)
+                        pauseTransfer(taskId, updateRepository = true)
                     }
                 }
                 ACTION_RESUME_TRANSFER -> {
                     val taskId = it.getStringExtra(EXTRA_TASK_ID)
                     if (taskId != null) {
-                        resumeTransfer(taskId)
+                        resumeTransfer(taskId, updateRepository = true)
                     }
                 }
                 ACTION_CANCEL_TRANSFER -> {
                     val taskId = it.getStringExtra(EXTRA_TASK_ID)
                     if (taskId != null) {
-                        cancelTransfer(taskId)
+                        cancelTransfer(taskId, updateRepository = true)
                     }
                 }
             }
@@ -169,7 +176,9 @@ class TransferService : Service() {
     
     override fun onDestroy() {
         Log.d(TAG, "TransferService onDestroy")
+        TransferServiceController.unregister(this)
         unregisterNetworkCallback()
+        connectionPool.closeAll()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -253,11 +262,13 @@ class TransferService : Service() {
         downloadExecutor = DownloadExecutor(
             context = applicationContext,
             taskUpdater = taskUpdater,
-            streamCopier = streamCopier
+            streamCopier = streamCopier,
+            connectionProvider = connectionPool
         )
         uploadExecutor = UploadExecutor(
             context = applicationContext,
-            streamCopier = streamCopier
+            streamCopier = streamCopier,
+            connectionProvider = connectionPool
         )
     }
 
@@ -272,6 +283,7 @@ class TransferService : Service() {
         }
 
         cancelledTasks.remove(taskId)
+        setPaused(taskId, false)
         // 存储配置以便恢复时使用
         taskConfigs[taskId] = config
 
@@ -296,7 +308,7 @@ class TransferService : Service() {
                     executeTransferWithRetry(task, config)
 
                     // 传输完成
-                    if (!pausedTasks.contains(taskId) && !cancelledTasks.contains(taskId)) {
+                    if (!isPaused(taskId) && !isCancelled(taskId)) {
                         repository.updateTaskStatus(taskId, TransferStatus.COMPLETED)
                         Log.d(TAG, "任务 $taskId 完成")
                     }
@@ -321,9 +333,11 @@ class TransferService : Service() {
                     transferSemaphore.release()
                     activeTransferJobs.remove(taskId)
                     if (cancelledTasks.remove(taskId)) {
-                        pausedTasks.remove(taskId)
+                        setPaused(taskId, false)
                         taskConfigs.remove(taskId)
                     }
+                    pausedSignals.remove(taskId)
+                    connectionPool.closeIdleConnections()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "启动任务 $taskId 时出错: ${e.message}", e)
@@ -426,21 +440,37 @@ class TransferService : Service() {
     /**
      * 暂停传输任务
      */
-    private fun pauseTransfer(taskId: String) {
-        Log.d(TAG, "暂停任务: $taskId")
-        pausedTasks.add(taskId)
+    override fun pauseTransfer(taskId: String) {
+        pauseTransfer(taskId, updateRepository = false)
+    }
 
-        serviceScope.launch {
-            repository.updateTaskStatus(taskId, TransferStatus.PAUSED)
+    private fun pauseTransfer(taskId: String, updateRepository: Boolean) {
+        Log.d(TAG, "暂停任务: $taskId")
+        setPaused(taskId, true)
+
+        if (updateRepository) {
+            serviceScope.launch {
+                repository.updateTaskStatus(taskId, TransferStatus.PAUSED)
+            }
         }
     }
     
     /**
      * 恢复传输任务
      */
-    private fun resumeTransfer(taskId: String) {
+    override fun resumeTransfer(taskId: String) {
+        resumeTransfer(taskId, updateRepository = false)
+    }
+
+    private fun resumeTransfer(taskId: String, updateRepository: Boolean) {
         Log.d(TAG, "恢复任务: $taskId")
-        pausedTasks.remove(taskId)
+        setPaused(taskId, false)
+
+        if (updateRepository) {
+            serviceScope.launch {
+                repository.updateTaskStatus(taskId, TransferStatus.ACTIVE)
+            }
+        }
 
         if (activeTransferJobs.containsKey(taskId)) {
             return
@@ -470,11 +500,15 @@ class TransferService : Service() {
     /**
      * 取消传输任务
      */
-    private fun cancelTransfer(taskId: String) {
+    override fun cancelTransfer(taskId: String) {
+        cancelTransfer(taskId, updateRepository = false)
+    }
+
+    private fun cancelTransfer(taskId: String, updateRepository: Boolean) {
         Log.d(TAG, "取消任务: $taskId")
 
         cancelledTasks.add(taskId)
-        pausedTasks.remove(taskId)
+        setPaused(taskId, false)
 
         // 取消 Job
         activeTransferJobs[taskId]?.cancel()
@@ -483,8 +517,10 @@ class TransferService : Service() {
         // 清理配置
         taskConfigs.remove(taskId)
 
-        serviceScope.launch {
-            repository.updateTaskStatus(taskId, TransferStatus.CANCELLED)
+        if (updateRepository) {
+            serviceScope.launch {
+                repository.updateTaskStatus(taskId, TransferStatus.CANCELLED)
+            }
         }
     }
 
@@ -492,10 +528,11 @@ class TransferService : Service() {
      * 暂停期间阻塞传输循环，直到用户恢复或任务被取消
      */
     private suspend fun waitWhilePaused(taskId: String) {
-        while (pausedTasks.contains(taskId)) {
+        while (isPaused(taskId)) {
             ensureTaskNotCancelled(taskId)
             coroutineContext.ensureActive()
-            delay(100)
+            pausedSignal(taskId)
+                .first { isPaused -> !isPaused || isCancelled(taskId) }
         }
     }
 
@@ -503,9 +540,40 @@ class TransferService : Service() {
      * 如果任务已取消，立即中断当前协程，避免错误地写成失败状态
      */
     private fun ensureTaskNotCancelled(taskId: String) {
-        if (cancelledTasks.contains(taskId)) {
+        if (isCancelled(taskId)) {
             throw CancellationException("任务已取消")
         }
+    }
+
+    private fun observeTaskStateChanges() {
+        serviceScope.launch {
+            repository.taskStatuses.collect { taskStatuses ->
+                activeTransferJobs.keys.forEach { taskId ->
+                    when (taskStatuses[taskId]) {
+                        TransferStatus.PAUSED -> pauseTransfer(taskId, updateRepository = false)
+                        TransferStatus.ACTIVE -> resumeTransfer(taskId, updateRepository = false)
+                        TransferStatus.CANCELLED -> cancelTransfer(taskId, updateRepository = false)
+                        else -> Unit
+                    }
+                }
+            }
+        }
+    }
+
+    private fun pausedSignal(taskId: String): MutableStateFlow<Boolean> {
+        return pausedSignals.computeIfAbsent(taskId) { MutableStateFlow(false) }
+    }
+
+    private fun setPaused(taskId: String, paused: Boolean) {
+        pausedSignals.computeIfAbsent(taskId) { MutableStateFlow(paused) }.value = paused
+    }
+
+    private fun isPaused(taskId: String): Boolean {
+        return pausedSignals[taskId]?.value == true
+    }
+
+    private fun isCancelled(taskId: String): Boolean {
+        return cancelledTasks.contains(taskId)
     }
 
     /**
@@ -532,7 +600,7 @@ class TransferService : Service() {
                     serviceScope.launch {
                         // 暂停所有活动任务
                         activeTransferJobs.keys.forEach { taskId ->
-                            pauseTransfer(taskId)
+                            pauseTransfer(taskId, updateRepository = true)
                         }
                         updateNotification(
                             getString(R.string.transfer_notification_wifi_lost_title),
@@ -573,7 +641,7 @@ class TransferService : Service() {
                     Log.w(TAG, "网络从 WiFi 切换到移动网络，暂停所有传输")
                     serviceScope.launch {
                         activeTransferJobs.keys.forEach { taskId ->
-                            pauseTransfer(taskId)
+                            pauseTransfer(taskId, updateRepository = true)
                         }
                         updateNotification(
                             getString(R.string.transfer_notification_cellular_title),

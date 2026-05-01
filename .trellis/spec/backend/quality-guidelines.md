@@ -75,15 +75,67 @@
 
 - Activity 不直接维护 `selectedTab`、设置子页枚举或页面级 `when` 分发。
 - 顶层 route 只表示页面位置；`SMBConfig` 这类运行时对象继续由导航图内的 Compose state 保存并传给 screen/factory，不通过字符串 route 临时序列化。
+- 导航图内跨页面使用的运行时状态应放入 Hilt ViewModel + `SavedStateHandle`，或使用可靠 `rememberSaveable`；不要只用普通 `remember` 保存当前连接、编辑配置、初始路径或预览可见性。
 - 底部导航切换使用单一 helper 保持 `launchSingleTop`、`restoreState` 和顶层回栈策略一致。
 - 设置主页系统返回到连接管理页；隐私政策和关于页面通过 `PredictiveBackAnimatedContent` 返回设置主页。
 - 文件预览覆盖层可见时，导航图隐藏主底部导航；目录层级返回仍由 `FileListScreen` 自己处理。
+- `SMBConfig` 存入 `SavedStateHandle` 时只能写入 ID 和非敏感导航快照，不得写入 password 或完整 `SMBConfig.toJsonString()`；需要完整凭据时通过配置 ID 从安全配置仓库恢复，恢复不到时密码保持为空并让后续连接流程失败/重试。
 
 检查点：
 
 - `MainActivity.kt` 应保持薄入口，不重新引入 `AppContent` 或底部导航实现。
 - 新增顶层页面时，同时更新 `AppDestination`、`AppNavGraph` 和底部导航选择映射。
 - 迁移导航时不要顺手引入 Hilt、重构 Repository 或改变传输服务行为。
+- 修改顶层导航状态时，补充 ViewModel 单测覆盖 `SavedStateHandle` 恢复。
+
+### 场景：顶层导航运行时状态持久化
+
+#### 1. Scope / Trigger
+
+- Trigger: 顶层导航需要跨连接页、编辑页、文件列表页共享当前连接、编辑对象、初始路径或预览可见性。
+
+#### 2. Signatures
+
+- `AppNavigationViewModel`
+- `SavedStateHandle`
+- 不含 password 的 SMB 配置导航快照
+
+#### 3. Contracts
+
+- `AppNavGraph` 只负责渲染导航和分发用户事件，不直接用普通 `remember` 保存跨页面业务状态。
+- `SMBConfig` 存入 `SavedStateHandle` 时只能使用不含 password 的安全快照；route 中只保留页面位置，不携带完整配置。
+- 文件预览可见性、当前连接和编辑配置清理必须由同一个 ViewModel API 完成，避免导航栏状态与页面状态不同步。
+
+#### 4. Validation & Error Matrix
+
+- 旋转屏幕或配置变化 -> 当前连接、初始路径和编辑对象应恢复。
+- 保存的 JSON 无法解析 -> 清空对应配置并回到安全的未连接状态。
+- 离开文件列表或连接被清空 -> 文件预览可见性必须重置为 false。
+
+#### 5. Good/Base/Bad Cases
+
+- Good: `AppNavGraph` 调用 `navigationViewModel.setCurrentConfig(config)` 后导航到文件列表。
+- Base: 仅页面内部临时动画状态可以继续使用普通 `remember`。
+- Bad: `var currentConfig by remember { mutableStateOf<SMBConfig?>(null) }` 控制顶层文件页入口。
+
+#### 6. Tests Required
+
+- ViewModel 单测覆盖 `SavedStateHandle` 初始化恢复当前连接和编辑配置。
+- 单测覆盖清空当前连接时同步清空初始路径和预览可见性。
+
+#### 7. Wrong vs Correct
+
+Wrong:
+
+```kotlin
+var currentConfig by remember { mutableStateOf<SMBConfig?>(null) }
+```
+
+Correct:
+
+```kotlin
+val navigationState by navigationViewModel.state.collectAsStateWithLifecycle()
+```
 
 ### 场景：图片与文本在线预览
 

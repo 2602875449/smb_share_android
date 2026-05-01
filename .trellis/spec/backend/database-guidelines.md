@@ -32,17 +32,72 @@ Room 当前只用于传输任务。
 
 - 声明 `TransferTaskEntity` 作为唯一 entity。
 - 使用数据库版本 `3`。
-- 设置 `exportSchema = false`。
+- 设置 `exportSchema = true`，schema 输出到 `app/schemas/`。
 - 暴露 `transferTaskDao()`。
 - 生产路径由 Hilt `AppModule` 以 `@Singleton` 提供数据库实例，再从数据库提供 `TransferTaskDao`。
-- 保留带 double-checked locking 的 `getInstance(context)` 作为兼容入口时，不要在新的生产调用点继续直接使用它。
-- 当前使用 `.fallbackToDestructiveMigration(true)`，并通过行内注释说明这是开发阶段选择。
+- 不保留 `getInstance(context)` / `clearInstance()` 自建单例入口；生产代码只通过 Hilt 注入数据库或 DAO。
+- 生产构建不使用 `.fallbackToDestructiveMigration(true)`；历史版本到当前版本通过 `TransferDatabase.MIGRATIONS` 显式迁移。
+- 当前仓库可审计历史中，Room schema 导出前的 `TransferDatabase` 已经声明为 version 3，且没有提交过 v1/v2 schema 文件；现有 1->2、2->3 迁移只支持“旧版本号但 `transfer_tasks` 表结构等价于当前 schema”的历史安装，任何真实结构差异应由 Room schema 校验失败暴露，不能用空迁移或 destructive migration 静默吞掉。
 
 示例：
 
 - `app/src/main/java/com/qi/smbshare/data/local/TransferDatabase.kt`
 
-不要记录或添加单独的 migration 框架。如果任务修改传输任务 schema，更新 Room 版本，并在 `TransferDatabase.kt` 中明确保留 migration 行为。
+不要添加单独的 migration 框架。如果任务修改传输任务 schema，更新 Room 版本、补充 `Migration`、重新生成 `app/schemas/`，并为迁移保留历史数据添加单测。
+
+### 场景：TransferDatabase 迁移与 schema 导出
+
+#### 1. Scope / Trigger
+
+- Trigger：修改 `TransferTaskEntity`、Room 版本、DAO 依赖注入或数据库构建配置。
+
+#### 2. Signatures
+
+- `@Database(entities = [TransferTaskEntity::class], version = <n>, exportSchema = true)`
+- `TransferDatabase.MIGRATIONS: Array<Migration>`
+- `Room.databaseBuilder(...).addMigrations(*TransferDatabase.MIGRATIONS)`
+- Gradle KSP 参数：`room.schemaLocation = "$projectDir/schemas"`
+
+#### 3. Contracts
+
+- `TransferDatabase` 只暴露 DAO，不提供自建全局单例。
+- Hilt `AppModule` 是生产数据库实例唯一创建入口。
+- schema JSON 必须提交到 `app/schemas/com.qi.smbshare.data.local.TransferDatabase/`。
+
+#### 4. Validation & Error Matrix
+
+- 缺少迁移路径 -> Room 打开旧库失败，禁止用 destructive migration 兜底。
+- schema 文件未更新 -> PR 中无法审查表结构变化。
+
+#### 5. Good/Base/Bad Cases
+
+- Good：新增列时增加版本、Migration、schema JSON 和迁移测试。
+- Base：只改 DAO 查询且不改 schema 时不升级版本。
+- Bad：为了通过本地测试添加 `fallbackToDestructiveMigration(true)`。
+
+#### 6. Tests Required
+
+- Room 迁移单测至少断言旧版本任务升级后仍可按 ID 读取。
+- 修改 Hilt/DAO 接线后运行 `./gradlew :app:compileDebugKotlin`。
+- 修改持久化行为后运行 `./gradlew :app:testDebugUnitTest`。
+
+#### 7. Wrong vs Correct
+
+Wrong：
+
+```kotlin
+Room.databaseBuilder(context, TransferDatabase::class.java, "transfer_database")
+    .fallbackToDestructiveMigration(true)
+    .build()
+```
+
+Correct：
+
+```kotlin
+Room.databaseBuilder(context, TransferDatabase::class.java, "transfer_database")
+    .addMigrations(*TransferDatabase.MIGRATIONS)
+    .build()
+```
 
 ---
 

@@ -5,7 +5,6 @@ import android.util.Log
 import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.smbj.share.DiskShare
-import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.SMBConfig
 import com.qi.smbshare.data.model.TransferTask
 import com.qi.smbshare.util.StorageHelper
@@ -18,16 +17,15 @@ class DownloadExecutor(
     private val context: Context,
     private val taskUpdater: TransferTaskUpdater,
     private val streamCopier: TransferStreamCopier,
-    private val connectionManagerFactory: () -> SMBConnectionManager = { SMBConnectionManager() }
+    private val connectionProvider: ServiceSmbConnectionProvider
 ) {
     suspend fun execute(task: TransferTask, config: SMBConfig) {
         Log.d(DOWNLOAD_TAG, "开始下载: ${task.fileName}")
 
-        val smbManager = connectionManagerFactory()
         var remoteFile: SMBFile? = null
 
         try {
-            val diskShare: DiskShare = smbManager.connect(config)
+            val diskShare: DiskShare = connectionProvider.acquire(config)
             Log.d(DOWNLOAD_TAG, "SMB 连接成功")
 
             val fileWriteInfo = StorageHelper.createDownloadFileOutputStream(
@@ -100,11 +98,7 @@ class DownloadExecutor(
             } catch (e: Exception) {
                 Log.w(DOWNLOAD_TAG, "关闭远程文件时出错: ${e.message}")
             }
-            try {
-                smbManager.disconnect()
-            } catch (e: Exception) {
-                Log.w(DOWNLOAD_TAG, "断开连接时出错: ${e.message}")
-            }
+            connectionProvider.release(config)
         }
     }
 

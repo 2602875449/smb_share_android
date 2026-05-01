@@ -20,7 +20,7 @@
 - `FileOperationError`
 - `UnknownError`
 
-`ErrorHandler.handleException()` 对已知 exception 类型和选定 message 关键词进行分类。`getErrorMessage(context, error)` 返回本地化 string resource。`getErrorMessageFromException(context, exception, fallbackMessageResId)` 对未知错误或通用文件操作失败使用操作级兜底消息。
+`ErrorHandler.handleException()` 对已知 exception 类型和选定 message 关键词进行分类，并通过 `AppError.type` 暴露稳定领域错误类型。`getErrorMessage(context, error)` 返回本地化 string resource。`getErrorMessageFromException(context, exception, fallbackMessageResId)` 对未知错误或通用文件操作失败使用操作级兜底消息。
 
 测试：
 
@@ -219,5 +219,59 @@ Screen 使用 `LaunchedEffect` 消费一次性 state，并通过 intent 清除�
 
 - 当已有 string resource 兜底消息可用时，不要直接向用户暴露原始 exception 文本。
 - 不要在 Composable 中处理长时间运行或阻塞式工作。
+- UI 导航决策不得依赖用户可见错误文案或 `contains()`；需要跳转时由 ViewModel state 暴露领域错误类型或显式导航事件。
 - 不要添加 HTTP/API 错误响应规则；本应用不包含 HTTP API server。
 - 除非任务明确要求，否则不要用其他错误抽象替换当前 `Result<T>` use case 模式。
+
+### 场景：错误类型驱动导航
+
+#### 1. Scope / Trigger
+
+- Trigger：UI 需要根据错误决定是否返回连接页、显示权限入口或阻止重试。
+
+#### 2. Signatures
+
+- `ErrorHandler.AppErrorType`
+- `ErrorHandler.AppError.type`
+- Feature state 中的领域字段，例如 `FileListState.connectionErrorType`
+
+#### 3. Contracts
+
+- 用户可见文案只用于展示，不作为业务判断输入。
+- ViewModel 在捕获异常时同时写入本地化错误文案和领域错误类型。
+- Screen 只消费领域字段执行导航，并在清除错误时一并清除领域字段。
+
+#### 4. Validation & Error Matrix
+
+- 文案翻译变化 -> 不应改变导航行为。
+- 未知异常 -> 可展示兜底文案，但不要误判为连接配置失效。
+- 连接/认证类异常 -> 可返回连接页或引导用户修正配置。
+
+#### 5. Good/Base/Bad Cases
+
+- Good：`LaunchedEffect(state.connectionErrorType)` 判断是否返回连接页。
+- Base：普通文件操作失败只展示 Snackbar。
+- Bad：`state.error?.contains("连接失败") == true` 后导航。
+
+#### 6. Tests Required
+
+- `ErrorHandlerTest` 覆盖异常到 `AppErrorType` 的映射。
+- 修改 feature state 时补充 state 或 ViewModel 测试，断言清除错误会清除类型字段。
+
+#### 7. Wrong vs Correct
+
+Wrong：
+
+```kotlin
+if (state.error?.contains("连接失败") == true) {
+    navController.navigate("connection")
+}
+```
+
+Correct：
+
+```kotlin
+if (state.connectionErrorType != null) {
+    navController.navigate("connection")
+}
+```
