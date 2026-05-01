@@ -67,6 +67,64 @@
 - 手势取消时不触发业务返回。
 - 变更后至少运行 `./gradlew test assembleDebug`。
 
+### 场景：图片与文本在线预览
+
+#### 1. Scope / Trigger
+
+- Trigger: 从 SMB 远端文件流读取图片或文本内容，并在文件列表页内覆盖显示预览。
+- 目标：网络读取和大小限制由 ViewModel 管理，Composable 只根据 `PreviewState` 展示内容，避免 UI 层直接执行 SMB IO。
+
+#### 2. Signatures
+
+- `FileListIntent.PreviewFile(filePath: String, fileName: String)`
+- `FileListIntent.ClosePreview`
+- `PreviewState.ImageReady(bytes: ByteArray)`
+- `PreviewState.TextReady(content: String, isTruncated: Boolean = false)`
+
+#### 3. Contracts
+
+- 预览入口只对 `FileTypeHelper.isPreviewable(file.name)` 返回 true 的文件显示。
+- 图片文件由 ViewModel 通过 `SMBFileRepository.getFileInputStream(filePath)` 读取字节，UI 使用图片加载组件从内存字节解码。
+- 文本文件最多读取 1 MB；超过限制时 `isTruncated = true`，UI 显示截断提示。
+- 预览覆盖层可见时由 `previewFileName != null` 表示，关闭预览必须取消当前预览协程并把状态恢复为 `PreviewState.Idle`。
+
+#### 4. Validation & Error Matrix
+
+- SMB 流打开或读取失败 -> `PreviewState.Error`，显示本地化错误文案。
+- 重新打开另一个预览文件 -> 取消旧预览协程，只允许当前文件更新 state。
+- 文本超过 1 MB -> 显示前 1 MB，并展示截断提示。
+- 系统返回 / 顶部返回 -> 关闭预览，不退出文件列表页。
+
+#### 5. Good/Base/Bad Cases
+
+- Good：图片和文本读取都在 `Dispatchers.IO` 中执行，Composable 只消费 state。
+- Good：预览页复用 `PredictiveBackAnimatedContent`，并隐藏下层底部导航。
+- Base：不支持的文件类型不显示预览入口。
+- Bad：在 `FilePreviewScreen` 中直接调用 repository 或打开 SMB 流。
+- Bad：文本预览无大小上限，导致大文件一次性读入内存。
+
+#### 6. Tests Required
+
+- `FileTypeHelper` 单测覆盖图片、文本和不可预览类型。
+- 状态单测覆盖 `ImageReady`、`TextReady(isTruncated = true)`、`Error` 和关闭预览后的 `Idle`。
+- ViewModel 行为变化时，补充 fake repository 测试读取成功、读取失败和取消旧预览的 state 转换。
+
+#### 7. Wrong vs Correct
+
+Wrong：
+
+```kotlin
+val text = repository.getFileInputStream(path).readBytes().decodeToString()
+```
+
+Correct：
+
+```kotlin
+viewModel.handleIntent(FileListIntent.PreviewFile(file.path, file.name))
+```
+
+---
+
 ### 场景：在线视频预览缓存
 
 #### 1. Scope / Trigger

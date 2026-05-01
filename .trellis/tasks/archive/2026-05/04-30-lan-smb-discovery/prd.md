@@ -50,16 +50,16 @@
 
 ## Acceptance Criteria
 
-* [ ] 用户打开新建连接页，可以看到“扫描局域网 SMB 主机”的入口。
-* [ ] 扫描中显示加载状态，并允许用户取消或重新扫描。
-* [ ] mDNS `_smb._tcp` 发现到的主机能显示在列表中。
-* [ ] NetBIOS/445 扫描发现到的 Windows/SMB 主机能显示在列表中。
-* [ ] 当 SMB 主机与手机位于不同子网但路由可达时，用户输入目标 IP 或 `/24`-`/32` CIDR 后能主动探测并显示可达主机。
-* [ ] 发现列表按 IP 去重，同一个主机不会重复出现。
-* [ ] 点击发现项后，服务器地址自动填入表单，端口使用发现端口或默认 445。
-* [ ] 未发现主机、网络不可用、权限/系统服务异常等状态有中文提示，且不影响手动填写。
-* [ ] 新增或更新的单元测试通过。
-* [ ] `./gradlew testDebugUnitTest` 通过。
+* [x] 用户打开新建连接页，可以看到“扫描局域网 SMB 主机”的入口。
+* [x] 扫描中显示加载状态，并允许用户取消或重新扫描。
+* [x] mDNS `_smb._tcp` 发现到的主机能显示在列表中。
+* [x] NetBIOS/445 扫描发现到的 Windows/SMB 主机能显示在列表中。
+* [x] 当 SMB 主机与手机位于不同子网但路由可达时，用户输入目标 IP 或 `/24`-`/32` CIDR 后能主动探测并显示可达主机。
+* [x] 发现列表按 IP 去重，同一个主机不会重复出现。
+* [x] 点击发现项后，服务器地址自动填入表单，端口使用发现端口或默认 445。
+* [x] 未发现主机、网络不可用、权限/系统服务异常等状态有中文提示，且不影响手动填写。
+* [x] 新增或更新的单元测试通过。
+* [x] `./gradlew testDebugUnitTest` 通过。
 
 ## Definition of Done
 
@@ -93,6 +93,11 @@
 * Android mDNS 可能需要持有 Wi-Fi multicast lock 才能在部分设备上稳定接收组播；如实现中使用，需要补充 `CHANGE_WIFI_MULTICAST_STATE` 权限。
 * NetBIOS 和端口扫描必须在 `Dispatchers.IO` 中执行，并设置短超时与并发上限。
 
+## Completion Notes
+
+* 相关发现规范已沉淀到 `.trellis/spec/backend/directory-structure.md` 的“局域网发现与平台网络能力”章节。
+* 验证：`./gradlew test assembleDebug` 已通过。
+
 ## Research References
 
-* 待补充：`.trellis/tasks/04-30-lan-smb-discovery/research/android-smb-discovery.md`
+* `.trellis/tasks/04-30-lan-smb-discovery/research/android-smb-discovery.md`
