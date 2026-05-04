@@ -16,7 +16,9 @@ import com.qi.smbshare.domain.usecase.DeleteFileUseCase
 import com.qi.smbshare.domain.usecase.ListFilesUseCase
 import com.qi.smbshare.domain.usecase.RenameFileUseCase
 import com.qi.smbshare.domain.usecase.UploadFileUseCase
+import com.qi.smbshare.service.transfer.TransferStreamCopier
 import com.qi.smbshare.util.ErrorHandler
+import com.qi.smbshare.util.FileTypeHelper
 import com.qi.smbshare.util.StorageHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -114,7 +116,7 @@ class FileListViewModel @AssistedInject constructor(
                 createFolder(intent.folderName)
             }
             is FileListIntent.DeleteFile -> {
-                deleteFile(intent.filePath)
+                deleteFile(intent.filePath, intent.isDirectory)
             }
             is FileListIntent.RenameFile -> {
                 renameFile(intent.filePath, intent.newName)
@@ -475,7 +477,7 @@ class FileListViewModel @AssistedInject constructor(
         }
     }
     
-    private fun deleteFile(filePath: String) {
+    private fun deleteFile(filePath: String, isDirectory: Boolean) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isOperating = true, error = null, fileMenuPath = null)
             
@@ -491,7 +493,7 @@ class FileListViewModel @AssistedInject constructor(
                 }
             
             withContext(Dispatchers.IO) {
-                deleteFileUseCase.execute(filePath)
+                deleteFileUseCase.execute(filePath, isDirectory)
             }
                 .onSuccess {
                     _state.value = _state.value.copy(isOperating = false)
@@ -550,171 +552,169 @@ class FileListViewModel @AssistedInject constructor(
         clearReadyPreviewCache()
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             val activeJob = coroutineContext[Job]
-            // 预览临时文件引用，被取消或出错时在 finally 中删除
-            var tempVideoFile: File? = null
-            var tempImageFile: File? = null
             try {
                 _state.value = _state.value.copy(
                     previewFileName = fileName,
                     previewState = PreviewState.Loading,
                     fileMenuPath = null
                 )
-
-                ensureConnected()
-                    .onFailure { e ->
-                        if (previewJob !== activeJob) return@onFailure
-                        val msg = formatError(e, R.string.error_reconnect_failed)
-                        _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
-                        return@launch
-                    }
-
-                val isImage = com.qi.smbshare.util.FileTypeHelper.isImageFile(fileName)
-                val isVideo = com.qi.smbshare.util.FileTypeHelper.isVideoFile(fileName)
-
-                if (isVideo) {
-                    // 视频：先获取文件大小以显示进度，再流式写入临时缓存文件
-                    val fileSize = withContext(Dispatchers.IO) {
-                        runCatching { fileRepository.getFileSize(filePath) }.getOrDefault(-1L)
-                    }
-                    if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@launch
-
-                    val cacheFile = createVideoPreviewCacheFile(
-                        cacheDir = getApplication<Application>().cacheDir,
-                        fileName = fileName
-                    )
-                    tempVideoFile = cacheFile
-                    val initialProgress = if (fileSize > 0) 0f else -1f
-                    _state.value = _state.value.copy(
-                        previewState = PreviewState.VideoDownloading(initialProgress)
-                    )
-
-                    val streamResult = withContext(Dispatchers.IO) {
-                        runCatching {
-                            fileRepository.getFileInputStream(filePath).use { input ->
-                                cacheFile.outputStream().use { output ->
-                                    val buffer = ByteArray(64 * 1024)
-                                    var totalRead = 0L
-                                    var bytesRead: Int
-                                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                                        // 取消协程时即时中断写入
-                                        ensureActive()
-                                        output.write(buffer, 0, bytesRead)
-                                        totalRead += bytesRead
-                                        if (fileSize > 0) {
-                                            val progress = (totalRead.toFloat() / fileSize).coerceIn(0f, 1f)
-                                            // MutableStateFlow.value 线程安全，可直接在 IO 线程更新
-                                            _state.value = _state.value.copy(
-                                                previewState = PreviewState.VideoDownloading(progress)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    streamResult
-                        .onSuccess {
-                            if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onSuccess
-                            _state.value = _state.value.copy(
-                                previewState = PreviewState.VideoReady(cacheFile)
-                            )
-                            // 所有权转让给 state，不在 finally 中删除
-                            tempVideoFile = null
-                        }
-                        .onFailure { e ->
-                            if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onFailure
-                            val msg = formatError(
-                                e as? Exception ?: RuntimeException(e),
-                                R.string.error_preview_failed
-                            )
-                            _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
-                        }
-                } else if (isImage) {
-                    val cacheFile = createImagePreviewCacheFile(
-                        cacheDir = getApplication<Application>().cacheDir,
-                        fileName = fileName
-                    )
-                    tempImageFile = cacheFile
-
-                    val result = withContext(Dispatchers.IO) {
-                        runCatching {
-                            fileRepository.getFileInputStream(filePath).use { input ->
-                                cacheFile.outputStream().use { output ->
-                                    // 图片预览复用流式缓存路径，避免全量读入导致大图占用双份内存。
-                                    val buffer = ByteArray(64 * 1024)
-                                    var bytesRead: Int
-                                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                                        ensureActive()
-                                        output.write(buffer, 0, bytesRead)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    result
-                        .onSuccess {
-                            if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onSuccess
-                            _state.value = _state.value.copy(previewState = PreviewState.ImageReady(cacheFile))
-                            // 所有权转让给 state，不在 finally 中删除
-                            tempImageFile = null
-                        }
-                        .onFailure { e ->
-                            if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onFailure
-                            val msg = formatError(
-                                e as? Exception ?: RuntimeException(e),
-                                R.string.error_preview_failed
-                            )
-                            _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
-                        }
-                } else {
-                    val result = withContext(Dispatchers.IO) {
-                        runCatching {
-                            fileRepository.getFileInputStream(filePath).use { input ->
-                                // 文本：最多读取 1 MB，超出截断
-                                val maxBytes = 1 * 1024 * 1024
-                                val buffer = ByteArray(maxBytes + 1)
-                                var totalRead = 0
-                                var bytesRead: Int
-                                while (totalRead <= maxBytes) {
-                                    bytesRead = input.read(buffer, totalRead, buffer.size - totalRead)
-                                    if (bytesRead == -1) break
-                                    totalRead += bytesRead
-                                }
-                                buffer.copyOf(totalRead.coerceAtMost(maxBytes + 1))
-                            }
-                        }
-                    }
-
-                    result
-                        .onSuccess { bytes ->
-                            if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onSuccess
-                            val isTruncated = bytes.size > 1 * 1024 * 1024
-                            val content = bytes.take(1 * 1024 * 1024).toByteArray()
-                                .toString(Charsets.UTF_8)
-                            _state.value = _state.value.copy(previewState = PreviewState.TextReady(content, isTruncated))
-                        }
-                        .onFailure { e ->
-                            if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onFailure
-                            val msg = formatError(
-                                e as? Exception ?: RuntimeException(e),
-                                R.string.error_preview_failed
-                            )
-                            _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
-                        }
+                ensureConnected().onFailure { e ->
+                    if (previewJob !== activeJob) return@onFailure
+                    val msg = formatError(e, R.string.error_reconnect_failed)
+                    _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
+                    return@launch
+                }
+                val cacheDir = getApplication<Application>().cacheDir
+                when {
+                    FileTypeHelper.isVideoFile(fileName) ->
+                        loadVideoPreview(filePath, fileName, cacheDir, activeJob)
+                    FileTypeHelper.isImageFile(fileName) ->
+                        loadImagePreview(filePath, fileName, cacheDir, activeJob)
+                    else ->
+                        loadTextPreview(filePath, fileName, activeJob)
                 }
             } finally {
-                // 被取消或出错时删除未移交的临时文件
-                tempVideoFile?.delete()
-                tempImageFile?.delete()
-                if (previewJob === activeJob) {
-                    previewJob = null
-                }
+                if (previewJob === activeJob) previewJob = null
             }
         }
         previewJob = job
         job.start()
+    }
+
+    /** 视频预览：流式写入临时缓存文件，带进度更新 */
+    private suspend fun loadVideoPreview(
+        filePath: String,
+        fileName: String,
+        cacheDir: File,
+        activeJob: Job?
+    ) {
+        val fileSize = withContext(Dispatchers.IO) {
+            runCatching { fileRepository.getFileSize(filePath) }.getOrDefault(-1L)
+        }
+        if (previewJob !== activeJob || _state.value.previewFileName != fileName) return
+
+        val cacheFile = createVideoPreviewCacheFile(cacheDir, fileName)
+        var tempFile: File? = cacheFile
+        try {
+            _state.value = _state.value.copy(
+                previewState = PreviewState.VideoDownloading(if (fileSize > 0) 0f else -1f)
+            )
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    fileRepository.getFileInputStream(filePath).use { input ->
+                        cacheFile.outputStream().use { output ->
+                            val buffer = ByteArray(TransferStreamCopier.PREVIEW_BUFFER_SIZE)
+                            var totalRead = 0L
+                            var bytesRead: Int
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                ensureActive()
+                                output.write(buffer, 0, bytesRead)
+                                totalRead += bytesRead
+                                if (fileSize > 0) {
+                                    // MutableStateFlow.value 线程安全，可直接在 IO 线程更新
+                                    _state.value = _state.value.copy(
+                                        previewState = PreviewState.VideoDownloading(
+                                            (totalRead.toFloat() / fileSize).coerceIn(0f, 1f)
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            result
+                .onSuccess {
+                    if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onSuccess
+                    _state.value = _state.value.copy(previewState = PreviewState.VideoReady(cacheFile))
+                    // 所有权移交给 state，不在 finally 中删除
+                    tempFile = null
+                }
+                .onFailure { e ->
+                    if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onFailure
+                    val msg = formatError(e as? Exception ?: RuntimeException(e), R.string.error_preview_failed)
+                    _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
+                }
+        } finally {
+            tempFile?.delete()
+        }
+    }
+
+    /** 图片预览：流式写入本地缓存文件，交 Coil 解码 */
+    private suspend fun loadImagePreview(
+        filePath: String,
+        fileName: String,
+        cacheDir: File,
+        activeJob: Job?
+    ) {
+        val cacheFile = createImagePreviewCacheFile(cacheDir, fileName)
+        var tempFile: File? = cacheFile
+        try {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    fileRepository.getFileInputStream(filePath).use { input ->
+                        cacheFile.outputStream().use { output ->
+                            // 流式写入避免大图占用双份内存
+                            val buffer = ByteArray(TransferStreamCopier.PREVIEW_BUFFER_SIZE)
+                            var bytesRead: Int
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                ensureActive()
+                                output.write(buffer, 0, bytesRead)
+                            }
+                        }
+                    }
+                }
+            }
+            result
+                .onSuccess {
+                    if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onSuccess
+                    _state.value = _state.value.copy(previewState = PreviewState.ImageReady(cacheFile))
+                    tempFile = null
+                }
+                .onFailure { e ->
+                    if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onFailure
+                    val msg = formatError(e as? Exception ?: RuntimeException(e), R.string.error_preview_failed)
+                    _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
+                }
+        } finally {
+            tempFile?.delete()
+        }
+    }
+
+    /** 文本预览：最多读取 1 MB，超出截断 */
+    private suspend fun loadTextPreview(
+        filePath: String,
+        fileName: String,
+        activeJob: Job?
+    ) {
+        val maxBytes = 1 * 1024 * 1024
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                fileRepository.getFileInputStream(filePath).use { input ->
+                    val buffer = ByteArray(maxBytes + 1)
+                    var totalRead = 0
+                    var bytesRead: Int
+                    while (totalRead <= maxBytes) {
+                        bytesRead = input.read(buffer, totalRead, buffer.size - totalRead)
+                        if (bytesRead == -1) break
+                        totalRead += bytesRead
+                    }
+                    buffer.copyOf(totalRead.coerceAtMost(maxBytes + 1))
+                }
+            }
+        }
+        result
+            .onSuccess { bytes ->
+                if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onSuccess
+                val isTruncated = bytes.size > maxBytes
+                val content = bytes.take(maxBytes).toByteArray().toString(Charsets.UTF_8)
+                _state.value = _state.value.copy(previewState = PreviewState.TextReady(content, isTruncated))
+            }
+            .onFailure { e ->
+                if (previewJob !== activeJob || _state.value.previewFileName != fileName) return@onFailure
+                val msg = formatError(e as? Exception ?: RuntimeException(e), R.string.error_preview_failed)
+                _state.value = _state.value.copy(previewState = PreviewState.Error(msg))
+            }
     }
 
     private fun clearReadyPreviewCache() {

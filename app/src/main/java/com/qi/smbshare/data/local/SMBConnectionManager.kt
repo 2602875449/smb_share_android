@@ -1,6 +1,7 @@
 package com.qi.smbshare.data.local
 
 import android.util.Log
+import androidx.annotation.GuardedBy
 import com.qi.smbshare.BuildConfig
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.auth.AuthenticationContext
@@ -9,6 +10,11 @@ import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.DiskShare
 import com.qi.smbshare.data.model.SMBConfig
 import java.io.IOException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private const val TAG = "SMBConnectionManager"
 
@@ -17,65 +23,73 @@ class SMBConnectionManager {
     private var session: Session? = null
     private var diskShare: DiskShare? = null
     private val client = SMBClient()
-    private val connectionLock = java.lang.Object()
-    private var activeDiskShareLeases = 0
-    private var isDiskShareLifecycleChanging = false
+
+    // 串行化连接生命周期变更；Mutex 在挂起时不占用线程。
+    private val lifecycleMutex = Mutex()
+
+    // stateLock 保护 activeDiskShareLeases 和 isDiskShareLifecycleChanging 的原子性，
+    // 仅用于极短的 check-then-act 操作，不在其中 suspend。
+    private val stateLock = Any()
+
+    @GuardedBy("stateLock") private var activeDiskShareLeases = 0
+    @GuardedBy("stateLock") private var isDiskShareLifecycleChanging = false
+
+    // 用于 suspend 等待所有租约归还；StateFlow 线程安全且支持 first { } 收集。
+    private val leaseCountFlow = MutableStateFlow(0)
 
     /**
-     * 连接到SMB服务器
+     * 连接到SMB服务器（suspend：等待租约归还时挂起协程而非阻塞线程）
      */
     @Throws(IOException::class)
-    fun connect(config: SMBConfig): DiskShare {
-        synchronized(connectionLock) {
-            try {
-                // 断开现有连接；连接三元组必须在同一把锁下更新，避免并发读取到半初始化状态。
-                isDiskShareLifecycleChanging = true
-                waitForDiskShareLeasesLocked()
-                disconnectLocked()
+    suspend fun connect(config: SMBConfig): DiskShare = lifecycleMutex.withLock {
+        try {
+            // 标记生命周期变更：之后的 acquireDiskShare 将快速失败
+            synchronized(stateLock) { isDiskShareLifecycleChanging = true }
+            // 等待现有租约全部归还，挂起而非阻塞
+            leaseCountFlow.first { it == 0 }
+            disconnectLocked()
 
-                // 创建连接
-                connection = client.connect(
-                    config.serverAddress,
-                    config.port
+            // 创建连接
+            connection = client.connect(
+                config.serverAddress,
+                config.port
+            )
+
+            // 创建认证上下文
+            val authContext = if (config.isAnonymous) {
+                // 匿名登录：使用 Guest 用户和空密码
+                // 大多数 SMB 服务器使用 Guest 用户来实现匿名访问
+                Log.d(TAG, "使用匿名登录（Guest 用户，空密码）")
+                AuthenticationContext("Guest", "".toCharArray(), null)
+            } else {
+                // 用户名密码登录，仅在调试构建中打印用户名，避免生产日志泄露凭据
+                if (BuildConfig.DEBUG) Log.d(TAG, "使用用户名密码登录: ${config.username}")
+                AuthenticationContext(
+                    config.username,
+                    config.password.toCharArray(),
+                    null // 域名，null表示使用默认
                 )
-
-                // 创建认证上下文
-                val authContext = if (config.isAnonymous) {
-                    // 匿名登录：使用 Guest 用户和空密码
-                    // 大多数 SMB 服务器使用 Guest 用户来实现匿名访问
-                    Log.d(TAG, "使用匿名登录（Guest 用户，空密码）")
-                    AuthenticationContext("Guest", "".toCharArray(), null)
-                } else {
-                    // 用户名密码登录，仅在调试构建中打印用户名，避免生产日志泄露凭据
-                    if (BuildConfig.DEBUG) Log.d(TAG, "使用用户名密码登录: ${config.username}")
-                    AuthenticationContext(
-                        config.username,
-                        config.password.toCharArray(),
-                        null // 域名，null表示使用默认
-                    )
-                }
-
-                // 建立会话
-                session = connection!!.authenticate(authContext)
-
-                // 打开共享文件夹
-                diskShare = session!!.connectShare(config.shareName) as DiskShare
-
-                return diskShare!!
-            } catch (e: Exception) {
-                Log.e(TAG, "========== 连接SMB服务器失败 ==========")
-                Log.e(TAG, "错误类型: ${e.javaClass.simpleName}")
-                Log.e(TAG, "错误消息: ${e.message}")
-                Log.e(TAG, "服务器地址: ${config.serverAddress}:${config.port}")
-                Log.e(TAG, "共享名称: ${config.shareName}")
-                Log.e(TAG, "匿名登录: ${config.isAnonymous}")
-                Log.e(TAG, "错误堆栈:", e)
-                disconnectLocked()
-                throw IOException("连接SMB服务器失败: ${e.message}", e)
-            } finally {
-                isDiskShareLifecycleChanging = false
-                connectionLock.notifyAll()
             }
+
+            // 建立会话
+            session = connection!!.authenticate(authContext)
+
+            // 打开共享文件夹
+            diskShare = session!!.connectShare(config.shareName) as DiskShare
+
+            diskShare!!
+        } catch (e: Exception) {
+            Log.e(TAG, "========== 连接SMB服务器失败 ==========")
+            Log.e(TAG, "错误类型: ${e.javaClass.simpleName}")
+            Log.e(TAG, "错误消息: ${e.message}")
+            Log.e(TAG, "服务器地址: ${config.serverAddress}:${config.port}")
+            Log.e(TAG, "共享名称: ${config.shareName}")
+            Log.e(TAG, "匿名登录: ${config.isAnonymous}")
+            Log.e(TAG, "错误堆栈:", e)
+            disconnectLocked()
+            throw IOException("连接SMB服务器失败: ${e.message}", e)
+        } finally {
+            synchronized(stateLock) { isDiskShareLifecycleChanging = false }
         }
     }
 
@@ -83,18 +97,19 @@ class SMBConnectionManager {
      * 获取当前活动的共享连接
      */
     fun getDiskShare(): DiskShare? {
-        return synchronized(connectionLock) { diskShare }
+        return synchronized(stateLock) { diskShare }
     }
 
     @Throws(IOException::class)
     fun acquireDiskShare(): DiskShareLease {
-        return synchronized(connectionLock) {
+        return synchronized(stateLock) {
             val currentShare = diskShare
             if (currentShare == null || isDiskShareLifecycleChanging) {
                 Log.e(TAG, "获取共享连接失败: 未连接到SMB服务器")
                 throw IOException("未连接到SMB服务器")
             }
             activeDiskShareLeases++
+            leaseCountFlow.value = activeDiskShareLeases
             DiskShareLease(currentShare, this)
         }
     }
@@ -110,73 +125,51 @@ class SMBConnectionManager {
      * 检查连接是否有效
      */
     fun isConnected(): Boolean {
-        return synchronized(connectionLock) {
-            try {
-                diskShare?.isConnected == true
-            } catch (e: Exception) {
-                false
-            }
+        val currentShare = synchronized(stateLock) { diskShare }
+        return try {
+            currentShare?.isConnected == true
+        } catch (e: Exception) {
+            false
         }
     }
 
     /**
-     * 断开连接
+     * 断开连接。等待活跃租约归还后再关闭底层共享，避免中断正在进行的 SMB 文件操作。
      */
     fun disconnect() {
-        synchronized(connectionLock) {
-            try {
-                isDiskShareLifecycleChanging = true
-                waitForDiskShareLeasesLocked()
-                disconnectLocked()
-            } finally {
-                isDiskShareLifecycleChanging = false
-                connectionLock.notifyAll()
+        runBlocking {
+            lifecycleMutex.withLock {
+                try {
+                    synchronized(stateLock) { isDiskShareLifecycleChanging = true }
+                    leaseCountFlow.first { it == 0 }
+                    disconnectLocked()
+                } finally {
+                    synchronized(stateLock) { isDiskShareLifecycleChanging = false }
+                }
             }
         }
     }
 
     private fun releaseDiskShareLease() {
-        synchronized(connectionLock) {
+        synchronized(stateLock) {
             activeDiskShareLeases--
-            connectionLock.notifyAll()
-        }
-    }
-
-    private fun waitForDiskShareLeasesLocked() {
-        var interrupted = false
-        while (activeDiskShareLeases > 0) {
-            try {
-                connectionLock.wait()
-            } catch (e: InterruptedException) {
-                interrupted = true
-            }
-        }
-        if (interrupted) {
-            Thread.currentThread().interrupt()
+            leaseCountFlow.value = activeDiskShareLeases
         }
     }
 
     private fun disconnectLocked() {
-        try {
-            diskShare?.close()
-        } catch (e: Exception) {
-            // 忽略关闭错误
+        // 原子地取出并清空三元组，防止并发调用时重复关闭同一对象
+        val shareToClose: DiskShare?
+        val sessionToClose: Session?
+        val connectionToClose: Connection?
+        synchronized(stateLock) {
+            shareToClose = diskShare; diskShare = null
+            sessionToClose = session; session = null
+            connectionToClose = connection; connection = null
         }
-        diskShare = null
-
-        try {
-            session?.close()
-        } catch (e: Exception) {
-            // 忽略关闭错误
-        }
-        session = null
-
-        try {
-            connection?.close()
-        } catch (e: Exception) {
-            // 忽略关闭错误
-        }
-        connection = null
+        try { shareToClose?.close() } catch (e: Exception) {}
+        try { sessionToClose?.close() } catch (e: Exception) {}
+        try { connectionToClose?.close() } catch (e: Exception) {}
     }
 
     /**

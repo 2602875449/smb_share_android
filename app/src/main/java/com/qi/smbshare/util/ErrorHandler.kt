@@ -5,6 +5,8 @@ import androidx.annotation.StringRes
 import com.qi.smbshare.R
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
@@ -62,146 +64,94 @@ object ErrorHandler {
      */
     fun handleException(exception: Exception): AppError {
         return when (exception) {
-            is SocketTimeoutException -> {
-                AppError.NetworkError(
-                    R.string.error_network_timeout,
-                    "连接超时，请检查网络或服务器地址"
-                )
-            }
-            is UnknownHostException -> {
-                AppError.NetworkError(
-                    R.string.error_network_unknown_host,
-                    "无法找到服务器，请检查服务器地址"
-                )
-            }
-            is FileNotFoundException -> {
-                AppError.FileOperationError(
-                    R.string.error_file_not_found,
-                    "文件不存在或已被删除"
-                )
-            }
+            // 优先匹配精确的网络异常类型，比关键字匹配更可靠
+            is SocketTimeoutException -> AppError.NetworkError(
+                R.string.error_network_timeout, "连接超时，请检查网络或服务器地址"
+            )
+            is UnknownHostException -> AppError.NetworkError(
+                R.string.error_network_unknown_host, "无法找到服务器，请检查服务器地址"
+            )
+            is ConnectException -> AppError.NetworkError(
+                R.string.error_network_server_unreachable, "无法连接服务器，请检查网络或服务器状态"
+            )
+            is SocketException -> AppError.NetworkError(
+                R.string.error_network_unavailable, "网络连接不可用，请检查网络设置"
+            )
+            is FileNotFoundException -> AppError.FileOperationError(
+                R.string.error_file_not_found, "文件不存在或已被删除"
+            )
+            is SecurityException -> AppError.PermissionError(
+                R.string.error_permission_storage, "没有存储权限，无法完成操作"
+            )
             is IOException -> {
-                val cause = exception.cause
-                val message = exception.message.orEmpty()
-                val causeMessage = cause?.message.orEmpty()
-                fun containsKeyword(vararg keywords: String): Boolean {
-                    return keywords.any { keyword ->
-                        message.contains(keyword, ignoreCase = true) ||
-                        causeMessage.contains(keyword, ignoreCase = true)
+                // SMBJ 经常把底层网络异常包装成 IOException，先检查 cause 再按关键字分类
+                val causeError = exception.cause?.let { cause ->
+                    when (cause) {
+                        is SocketTimeoutException -> AppError.NetworkError(
+                            R.string.error_network_timeout, "连接超时，请检查网络或服务器地址"
+                        )
+                        is UnknownHostException -> AppError.NetworkError(
+                            R.string.error_network_unknown_host, "无法找到服务器，请检查服务器地址"
+                        )
+                        is ConnectException -> AppError.NetworkError(
+                            R.string.error_network_server_unreachable, "无法连接服务器，请检查网络或服务器状态"
+                        )
+                        is SocketException -> AppError.NetworkError(
+                            R.string.error_network_unavailable, "网络连接不可用，请检查网络设置"
+                        )
+                        else -> null
                     }
                 }
-
-                // SMBJ 经常把底层网络异常包装成 IOException，这里通过 cause 和关键字还原更准确的错误类型
-                when {
-                    cause is SocketTimeoutException ||
-                    containsKeyword("timeout", "超时") -> {
-                        AppError.NetworkError(
-                            R.string.error_network_timeout,
-                            "连接超时，请检查网络或服务器地址"
-                        )
-                    }
-                    cause is UnknownHostException ||
-                    containsKeyword("unknown host", "no address associated", "无法找到服务器") -> {
-                        AppError.NetworkError(
-                            R.string.error_network_unknown_host,
-                            "无法找到服务器，请检查服务器地址"
-                        )
-                    }
-                    containsKeyword("Authentication", "认证", "password", "密码") -> {
-                        AppError.AuthenticationError(
-                            R.string.error_authentication_failed,
-                            "用户名或密码错误"
-                        )
-                    }
-                    containsKeyword("Permission", "权限") -> {
-                        AppError.PermissionError(
-                            R.string.error_permission_storage,
-                            "没有存储权限，无法完成操作"
-                        )
-                    }
-                    containsKeyword(
-                        "Network",
-                        "网络",
-                        "连接SMB服务器失败",
-                        "连接失败",
-                        "未连接",
-                        "closed"
-                    ) -> {
-                        AppError.NetworkError(
-                            R.string.error_network_unavailable,
-                            "网络连接不可用，请检查网络设置"
-                        )
-                    }
-                    containsKeyword("failed to connect", "unreachable", "refused") -> {
-                        AppError.NetworkError(
-                            R.string.error_network_server_unreachable,
-                            "无法连接服务器，请检查网络或服务器状态"
-                        )
-                    }
-                    else -> {
-                        AppError.FileOperationError(
-                            R.string.error_file_operation_failed,
-                            "文件操作失败，请稍后重试"
-                        )
-                    }
-                }
-            }
-            is SecurityException -> {
-                AppError.PermissionError(
-                    R.string.error_permission_storage,
-                    "没有存储权限，无法完成操作"
+                causeError ?: classifyByKeyword(
+                    exception.message.orEmpty() + " " + exception.cause?.message.orEmpty()
                 )
             }
-            else -> {
-                // 尝试从异常消息中提取有用信息
-                val message = exception.message ?: "未知错误"
-                when {
-                    message.contains("timeout", ignoreCase = true) ||
-                    message.contains("超时", ignoreCase = true) -> {
-                        AppError.NetworkError(
-                            R.string.error_network_timeout,
-                            "连接超时，请检查网络或服务器地址"
-                        )
-                    }
-                    message.contains("authentication", ignoreCase = true) ||
-                    message.contains("认证", ignoreCase = true) ||
-                    message.contains("password", ignoreCase = true) ||
-                    message.contains("密码", ignoreCase = true) -> {
-                        AppError.AuthenticationError(
-                            R.string.error_authentication_failed,
-                            "用户名或密码错误"
-                        )
-                    }
-                    message.contains("permission", ignoreCase = true) ||
-                    message.contains("权限", ignoreCase = true) -> {
-                        AppError.PermissionError(
-                            R.string.error_permission_storage,
-                            "没有存储权限，无法完成操作"
-                        )
-                    }
-                    message.contains("network", ignoreCase = true) ||
-                    message.contains("网络", ignoreCase = true) ||
-                    message.contains("连接SMB服务器失败", ignoreCase = true) ||
-                    message.contains("连接失败", ignoreCase = true) ||
-                    message.contains("未连接", ignoreCase = true) ||
-                    message.contains("closed", ignoreCase = true) -> {
-                        AppError.NetworkError(
-                            R.string.error_network_unavailable,
-                            "网络连接不可用，请检查网络设置"
-                        )
-                    }
-                    message.contains("file", ignoreCase = true) ||
-                    message.contains("文件", ignoreCase = true) -> {
-                        AppError.FileOperationError(
-                            R.string.error_file_operation_failed,
-                            "文件操作失败，请稍后重试"
-                        )
-                    }
-                    else -> {
-                        AppError.UnknownError(message)
-                    }
-                }
-            }
+            else -> classifyByKeyword(exception.message.orEmpty())
+        }
+    }
+
+    /**
+     * 根据异常消息关键字推断错误类型（兜底策略，优先使用精确类型匹配）
+     */
+    private fun classifyByKeyword(text: String): AppError {
+        return when {
+            text.contains("timeout", ignoreCase = true) ||
+            text.contains("超时", ignoreCase = true) ->
+                AppError.NetworkError(R.string.error_network_timeout, "连接超时，请检查网络或服务器地址")
+
+            text.contains("unknown host", ignoreCase = true) ||
+            text.contains("no address associated", ignoreCase = true) ||
+            text.contains("无法找到服务器", ignoreCase = true) ->
+                AppError.NetworkError(R.string.error_network_unknown_host, "无法找到服务器，请检查服务器地址")
+
+            text.contains("failed to connect", ignoreCase = true) ||
+            text.contains("unreachable", ignoreCase = true) ||
+            text.contains("refused", ignoreCase = true) ->
+                AppError.NetworkError(R.string.error_network_server_unreachable, "无法连接服务器，请检查网络或服务器状态")
+
+            text.contains("Authentication", ignoreCase = true) ||
+            text.contains("认证", ignoreCase = true) ||
+            text.contains("password", ignoreCase = true) ||
+            text.contains("密码", ignoreCase = true) ->
+                AppError.AuthenticationError(R.string.error_authentication_failed, "用户名或密码错误")
+
+            text.contains("permission", ignoreCase = true) ||
+            text.contains("权限", ignoreCase = true) ->
+                AppError.PermissionError(R.string.error_permission_storage, "没有存储权限，无法完成操作")
+
+            text.contains("network", ignoreCase = true) ||
+            text.contains("网络", ignoreCase = true) ||
+            text.contains("连接SMB服务器失败", ignoreCase = true) ||
+            text.contains("连接失败", ignoreCase = true) ||
+            text.contains("未连接", ignoreCase = true) ||
+            text.contains("closed", ignoreCase = true) ->
+                AppError.NetworkError(R.string.error_network_unavailable, "网络连接不可用，请检查网络设置")
+
+            text.contains("file", ignoreCase = true) ||
+            text.contains("文件", ignoreCase = true) ->
+                AppError.FileOperationError(R.string.error_file_operation_failed, "文件操作失败，请稍后重试")
+
+            else -> AppError.UnknownError(text.ifBlank { "未知错误" })
         }
     }
     

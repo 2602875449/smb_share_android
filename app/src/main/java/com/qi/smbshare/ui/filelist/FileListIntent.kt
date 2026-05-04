@@ -18,7 +18,7 @@ sealed class FileListIntent {
         val size: Long
     ) : FileListIntent()
     data class CreateFolder(val folderName: String) : FileListIntent()
-    data class DeleteFile(val filePath: String) : FileListIntent()
+    data class DeleteFile(val filePath: String, val isDirectory: Boolean) : FileListIntent()
     data class RenameFile(val filePath: String, val newName: String) : FileListIntent()
     object ShowCreateFolderDialog : FileListIntent()
     object HideCreateFolderDialog : FileListIntent()

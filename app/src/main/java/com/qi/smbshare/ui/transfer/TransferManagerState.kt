@@ -15,7 +15,8 @@ data class TransferManagerState(
     val selectedTaskIds: Set<String> = emptySet(),
     val activeTransferCount: Int = 0,
     val error: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    val fileValidityMap: Map<String, Boolean> = emptyMap()
 ) {
     /**
      * 获取当前 Tab 显示的任务列表

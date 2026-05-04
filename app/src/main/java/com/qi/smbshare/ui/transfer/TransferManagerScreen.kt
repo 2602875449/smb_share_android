@@ -1,11 +1,6 @@
 package com.qi.smbshare.ui.transfer
 
-import android.content.ActivityNotFoundException
-import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.Environment
-import android.provider.DocumentsContract
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -67,13 +62,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import android.net.Uri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qi.smbshare.data.model.TransferStatus
+import com.qi.smbshare.data.model.TransferTask
 import com.qi.smbshare.data.model.TransferType
 import com.qi.smbshare.ui.components.PermissionPermanentlyDeniedDialog
 import com.qi.smbshare.ui.components.PermissionRationaleDialog
@@ -123,7 +118,7 @@ fun TransferManagerScreen(
         mutableStateOf(getPersistedDownloadTreeUri(context))
     }
     var pendingFolderTask by remember {
-        mutableStateOf<com.qi.smbshare.data.model.TransferTask?>(null)
+        mutableStateOf<TransferTask?>(null)
     }
     val downloadFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -149,7 +144,7 @@ fun TransferManagerScreen(
         }
         pendingFolderTask = null
     }
-    val requestDownloadTreePermission: (com.qi.smbshare.data.model.TransferTask, Uri?) -> Unit =
+    val requestDownloadTreePermission: (TransferTask, Uri?) -> Unit =
         remember(downloadFolderLauncher) {
             { task, initialUri ->
                 pendingFolderTask = task
@@ -519,24 +514,8 @@ fun TransferManagerScreen(
                             items = tasks,
                             key = { task -> task.id }
                         ) { task ->
-                            // 检查文件是否有效（仅对已完成的下载任务）
-                            val isFileValid = remember(task.id, task.localPath, task.status) {
-                                if (task.type == TransferType.DOWNLOAD && 
-                                    task.status == TransferStatus.COMPLETED) {
-                                    // 打印 localPath 用于调试
-                                    Log.d("TransferManagerScreen", "检查文件有效性 - 任务ID: ${task.id}, 文件名: ${task.fileName}, localPath: ${task.localPath}")
-                                    
-                                    // 使用 StorageHelper 检查文件是否存在（支持 URI 格式）
-                                    val exists = com.qi.smbshare.util.StorageHelper.fileExists(
-                                        context,
-                                        task.localPath
-                                    )
-                                    Log.d("TransferManagerScreen", "文件存在性检查结果: $exists")
-                                    exists
-                                } else {
-                                    true
-                                }
-                            }
+                            // 文件有效性由 ViewModel 在 IO 线程统一检查
+                            val isFileValid = state.fileValidityMap[task.id] ?: true
                             
                             TransferTaskItem(
                                 task = task,
@@ -867,297 +846,4 @@ private fun DeleteConfirmDialog(
             }
         }
     )
-}
-
-/**
- * 打开文件
- * 根据文件类型使用合适的方式打开
- */
-private fun openFile(
-    context: android.content.Context,
-    task: com.qi.smbshare.data.model.TransferTask,
-    onInstallApk: (File) -> Unit
-) {
-    val isContentUri = task.localPath.startsWith("content://")
-
-    // 如果是 APK 文件，使用安装回调
-    if (task.fileName.endsWith(".apk", ignoreCase = true)) {
-        if (isContentUri) {
-            try {
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(Uri.parse(task.localPath), "application/vnd.android.package-archive")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        } else {
-            val file = File(task.localPath)
-            if (!file.exists()) {
-                return
-            }
-            onInstallApk(file)
-        }
-        return
-    }
-
-    // 其他文件类型，使用系统默认应用打开
-    try {
-        val uri = if (isContentUri) {
-            Uri.parse(task.localPath)
-        } else {
-            val file = File(task.localPath)
-            if (!file.exists()) {
-                return
-            }
-            FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
-        }
-
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, getMimeType(task.fileName))
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        
-        context.startActivity(intent)
-    } catch (e: Exception) {
-        // 无法打开文件
-        e.printStackTrace()
-    }
-}
-
-/**
- * 打开文件所在的文件夹
- * 使用系统文件管理器打开文件所在目录
- * 统一指向 Download/SMBShare，确保用户打开后就是我们的默认目录
- */
-private fun openFolder(
-    context: android.content.Context,
-    task: com.qi.smbshare.data.model.TransferTask,
-    savedTreeUri: Uri?,
-    onRequestTreePermission: (Uri?) -> Unit
-) {
-    try {
-        val defaultFolder = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "SMBShare"
-        ).apply {
-            if (!exists()) {
-                mkdirs()
-            }
-        }
-
-        val storageAuthority = "com.android.externalstorage.documents"
-        val downloadDocId = "primary:${Environment.DIRECTORY_DOWNLOADS}"
-        val docIdCandidates = listOf(
-            "$downloadDocId/SMBShare",
-            "primary:Downloads/SMBShare"
-        )
-
-        // 使用 LinkedHashSet 保证尝试顺序，同时去重
-        val candidateUris = linkedSetOf<Uri>()
-        var permissionRequired = false
-
-        val persistedTreeUri = savedTreeUri?.takeIf {
-            hasPersistedDownloadTreePermission(context, it)
-        }
-        persistedTreeUri?.let { treeUri ->
-            // 使用用户授权的目录，优先确保权限可用
-            val currentDocId = DocumentsContract.getTreeDocumentId(treeUri)
-            runCatching {
-                DocumentsContract.buildDocumentUriUsingTree(treeUri, currentDocId)
-            }.getOrNull()?.let(candidateUris::add)
-            docIdCandidates.forEach { docId ->
-                runCatching {
-                    DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
-                }.getOrNull()?.let(candidateUris::add)
-            }
-        }
-
-        // 方法1：构建树形 URI，再生成目录 Document URI，提高 ACTION_VIEW 打开的成功率
-        val downloadTreeUri = runCatching {
-            DocumentsContract.buildTreeDocumentUri(storageAuthority, downloadDocId)
-        }.getOrNull()
-        if (downloadTreeUri != null) {
-            docIdCandidates.forEach { docId ->
-                runCatching {
-                    DocumentsContract.buildDocumentUriUsingTree(downloadTreeUri, docId)
-                }.getOrNull()?.let(candidateUris::add)
-            }
-        }
-
-        // 方法2：直接构建 Document URI（部分 ROM 只支持此形式）
-        docIdCandidates.forEach { docId ->
-            runCatching {
-                DocumentsContract.buildDocumentUri(storageAuthority, docId)
-            }.getOrNull()?.let(candidateUris::add)
-        }
-
-        // 方法3：兜底使用 FileProvider 暴露目录
-        runCatching {
-            FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                defaultFolder
-            )
-        }.getOrNull()?.let(candidateUris::add)
-
-        // 逐个尝试使用 ACTION_VIEW 打开，避免直接进入“选择文件”模式
-        candidateUris.forEach { uri ->
-            when (tryOpenFolderWithViewIntent(context, uri)) {
-                FolderOpenResult.SUCCESS -> {
-                    Log.d("TransferManagerScreen", "成功通过 ACTION_VIEW 打开目录: $uri")
-                    return
-                }
-                FolderOpenResult.PERMISSION_REQUIRED -> {
-                    permissionRequired = true
-                }
-                FolderOpenResult.FAILED -> {}
-            }
-        }
-
-        if (permissionRequired && persistedTreeUri == null) {
-            Log.w("TransferManagerScreen", "缺少目录访问权限，准备请求用户授权 Download/SMBShare")
-            onRequestTreePermission(buildDownloadInitialUri(context))
-            return
-        }
-
-        // 方法4：仍无法直接定位时，退回到 ACTION_OPEN_DOCUMENT（会进入选择界面，但至少定位到目录）
-        val initialUri = runCatching {
-            DocumentsContract.buildDocumentUri(storageAuthority, "$downloadDocId/SMBShare")
-        }.getOrNull()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && initialUri != null) {
-            val pickerIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                type = "*/*"
-                addCategory(Intent.CATEGORY_OPENABLE)
-                addFlags(
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                        Intent.FLAG_ACTIVITY_NEW_TASK
-                )
-                putExtra(DocumentsContract.EXTRA_INITIAL_URI, initialUri)
-            }
-            context.startActivity(pickerIntent)
-            Log.d("TransferManagerScreen", "回退到 ACTION_OPEN_DOCUMENT，已定位到 SMBShare 目录")
-            return
-        }
-
-        Log.e("TransferManagerScreen", "所有方式均失败，无法打开 SMBShare 目录")
-    } catch (e: Exception) {
-        Log.e("TransferManagerScreen", "打开文件夹时发生异常: ${e.message}", e)
-    }
-}
-
-/**
- * 尝试通过 ACTION_VIEW 打开指定 URI 对应的目录
- * 某些 ROM 需要显式声明可写/可读和前缀权限，否则会抛出 ActivityNotFoundException
- */
-private fun tryOpenFolderWithViewIntent(
-    context: android.content.Context,
-    uri: Uri
-): FolderOpenResult {
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        data = uri
-        // 使用目录 MIME，提示系统这是一个文件夹
-        setDataAndType(uri, DocumentsContract.Document.MIME_TYPE_DIR)
-        addFlags(
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
-                Intent.FLAG_GRANT_PREFIX_URI_PERMISSION or
-                Intent.FLAG_ACTIVITY_NEW_TASK
-        )
-    }
-    return try {
-        context.startActivity(intent)
-        FolderOpenResult.SUCCESS
-    } catch (e: ActivityNotFoundException) {
-        Log.w("TransferManagerScreen", "当前 URI 无可处理的应用: ${e.message}")
-        FolderOpenResult.FAILED
-    } catch (e: SecurityException) {
-        Log.w("TransferManagerScreen", "缺少访问目录的权限: ${e.message}")
-        FolderOpenResult.PERMISSION_REQUIRED
-    } catch (e: Exception) {
-        Log.w("TransferManagerScreen", "ACTION_VIEW 打开目录失败: ${e.message}")
-        FolderOpenResult.FAILED
-    }
-}
-
-private enum class FolderOpenResult {
-    SUCCESS,
-    PERMISSION_REQUIRED,
-    FAILED
-}
-
-/**
- * 根据文件名获取 MIME 类型
- */
-private val textExtensions = setOf(
-    "txt", "md", "json", "xml", "html", "csv", "log", "ini", "cfg",
-    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx"
-)
-
-private val imageExtensions = setOf(
-    "jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif"
-)
-
-private val videoExtensions = setOf(
-    "mp4", "mkv", "avi", "mov", "wmv", "flv", "mpeg", "3gp"
-)
-
-private val audioExtensions = setOf(
-    "mp3", "aac", "wav", "flac", "ogg", "m4a", "amr"
-)
-
-/**
- * 根据文件后缀映射到大类 MIME，优先减少系统弹窗中过多的候选应用
- */
-private fun getMimeType(fileName: String): String {
-    val extension = fileName.substringAfterLast('.', "").lowercase()
-    return when {
-        extension in textExtensions -> "text/*"
-        extension in imageExtensions -> "image/*"
-        extension in videoExtensions -> "video/*"
-        extension in audioExtensions -> "audio/*"
-        else -> "*/*"
-    }
-}
-
-private const val DOWNLOAD_TREE_PREF = "transfer_manager_prefs"
-private const val KEY_DOWNLOAD_TREE_URI = "download_tree_uri"
-
-private fun getPersistedDownloadTreeUri(context: Context): Uri? {
-    val prefs = context.getSharedPreferences(DOWNLOAD_TREE_PREF, Context.MODE_PRIVATE)
-    val uriString = prefs.getString(KEY_DOWNLOAD_TREE_URI, null)
-    return uriString?.let { Uri.parse(it) }
-}
-
-private fun persistDownloadTreeUri(context: Context, uri: Uri) {
-    val prefs = context.getSharedPreferences(DOWNLOAD_TREE_PREF, Context.MODE_PRIVATE)
-    prefs.edit().putString(KEY_DOWNLOAD_TREE_URI, uri.toString()).apply()
-}
-
-private fun clearPersistedDownloadTreeUri(context: Context) {
-    val prefs = context.getSharedPreferences(DOWNLOAD_TREE_PREF, Context.MODE_PRIVATE)
-    prefs.edit().remove(KEY_DOWNLOAD_TREE_URI).apply()
-}
-
-private fun hasPersistedDownloadTreePermission(context: Context, uri: Uri): Boolean {
-    return context.contentResolver.persistedUriPermissions.any { persisted ->
-        persisted.uri == uri && persisted.isReadPermission
-    }
-}
-
-private fun buildDownloadInitialUri(context: Context): Uri? {
-    val storageAuthority = "com.android.externalstorage.documents"
-    val downloadDocId = "primary:${Environment.DIRECTORY_DOWNLOADS}"
-    return runCatching {
-        DocumentsContract.buildDocumentUri(storageAuthority, downloadDocId)
-    }.getOrNull()
 }

@@ -17,7 +17,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * 验证 SMBConnectionManager 对共享连接状态的并发访问有单一锁保护。
+ * 验证 SMBConnectionManager 对共享连接状态的并发访问安全。
+ *
+ * 设计说明：disconnect() 必须等待活跃租约归还，避免远端文件操作期间关闭共享。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])

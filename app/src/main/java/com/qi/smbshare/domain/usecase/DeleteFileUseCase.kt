@@ -13,13 +13,13 @@ private const val TAG = "DeleteFileUseCase"
 class DeleteFileUseCase @Inject constructor(
     private val fileRepository: SMBFileRepository
 ) {
-    suspend fun execute(path: String): Result<Unit> {
-        Log.d(TAG, "UseCase: 开始删除文件/文件夹")
+    suspend fun execute(path: String, isDirectory: Boolean): Result<Unit> {
+        Log.d(TAG, "UseCase: 开始删除文件/文件夹 (isDirectory=$isDirectory)")
         Log.d(TAG, "路径: $path")
         
         return try {
             withContext(Dispatchers.IO) {
-                fileRepository.deleteFileOrFolder(path)
+                fileRepository.deleteFileOrFolder(path, isDirectory)
             }
             Log.d(TAG, "UseCase: 删除成功")
             Result.success(Unit)

@@ -9,13 +9,16 @@ import com.qi.smbshare.data.model.TransferStatus
 import com.qi.smbshare.data.model.TransferType
 import com.qi.smbshare.data.repository.TransferRepository
 import com.qi.smbshare.util.ErrorHandler
+import com.qi.smbshare.util.StorageHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 传输管理器 ViewModel
@@ -116,12 +119,22 @@ class TransferManagerViewModel @Inject constructor(
                     task.status in listOf(TransferStatus.COMPLETED, TransferStatus.FAILED, TransferStatus.CANCELLED)
                 }
                 
+                // 在 IO 线程检查已完成下载任务的文件有效性，避免主线程阻塞
+                val fileValidityMap = withContext(Dispatchers.IO) {
+                    completedTasks
+                        .filter { it.type == TransferType.DOWNLOAD }
+                        .associate { task ->
+                            task.id to StorageHelper.fileExists(getApplication(), task.localPath)
+                        }
+                }
+
                 // 更新状态
                 _state.value = _state.value.copy(
                     downloadingTasks = downloadingTasks,
                     uploadingTasks = uploadingTasks,
                     completedTasks = completedTasks,
-                    activeTransferCount = activeCount
+                    activeTransferCount = activeCount,
+                    fileValidityMap = fileValidityMap
                 )
             }
         }
@@ -216,7 +229,7 @@ class TransferManagerViewModel @Inject constructor(
                         // 只删除下载任务的本地文件
                         if (it.type == TransferType.DOWNLOAD) {
                             // 使用 StorageHelper 删除文件（支持 URI 格式）
-                            fileDeleted = com.qi.smbshare.util.StorageHelper.deleteFile(
+                            fileDeleted = StorageHelper.deleteFile(
                                 getApplication(),
                                 it.localPath
                             )
@@ -310,7 +323,7 @@ class TransferManagerViewModel @Inject constructor(
                             // 只删除下载任务的本地文件
                             if (it.type == TransferType.DOWNLOAD) {
                                 // 使用 StorageHelper 删除文件（支持 URI 格式）
-                                val deleted = com.qi.smbshare.util.StorageHelper.deleteFile(
+                                val deleted = StorageHelper.deleteFile(
                                     getApplication(),
                                     it.localPath
                                 )

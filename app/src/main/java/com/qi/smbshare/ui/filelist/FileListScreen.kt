@@ -560,7 +560,7 @@ fun FileListScreen(
                                         )
                                     },
                                     onDelete = {
-                                        viewModel.handleIntent(FileListIntent.DeleteFile(file.path))
+                                        viewModel.handleIntent(FileListIntent.DeleteFile(file.path, file.isDirectory))
                                         viewModel.handleIntent(FileListIntent.HideFileMenu)
                                     },
                                     onRename = {

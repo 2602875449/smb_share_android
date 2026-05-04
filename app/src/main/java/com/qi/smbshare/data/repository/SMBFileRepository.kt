@@ -8,6 +8,7 @@ import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.smbj.share.File
 import com.qi.smbshare.data.local.SMBConnectionManager
 import com.qi.smbshare.data.model.FileItem
+import com.qi.smbshare.service.transfer.TransferStreamCopier
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -311,7 +312,7 @@ class SMBFileRepository @Inject constructor(
 
                     file.outputStream.use { outputStream ->
                         localFile.inputStream().use { inputStream ->
-                            val buffer = ByteArray(8192)
+                            val buffer = ByteArray(TransferStreamCopier.DEFAULT_BUFFER_SIZE)
                             var bytesRead: Int
 
                             while (inputStream.read(buffer).also { bytesRead = it } != -1) {
@@ -375,26 +376,23 @@ class SMBFileRepository @Inject constructor(
 
     /**
      * 删除文件或文件夹
+     * @param isDirectory 是否为目录；由调用方从 FileItem.isDirectory 传入，避免用异常流控制分支
      */
     @Throws(IOException::class)
-    fun deleteFileOrFolder(path: String) {
-        Log.d(TAG, "开始删除: $path")
+    fun deleteFileOrFolder(path: String, isDirectory: Boolean) {
+        Log.d(TAG, "开始删除: $path (isDirectory=$isDirectory)")
 
         try {
             connectionManager.withDiskShare { diskShare ->
                 val normalizedPath = normalizePath(path)
                 Log.d(TAG, "规范化后的路径: $normalizedPath")
 
-                // 先尝试作为文件删除
-                try {
-                    // 直接使用diskShare的rm方法删除文件
-                    diskShare.rm(normalizedPath)
-                    Log.d(TAG, "文件删除成功: $normalizedPath")
-                } catch (e: Exception) {
-                    // 如果作为文件删除失败，尝试作为文件夹删除
-                    Log.d(TAG, "作为文件删除失败，尝试作为文件夹删除: ${e.message}")
+                if (isDirectory) {
                     diskShare.rmdir(normalizedPath, true)
                     Log.d(TAG, "文件夹删除成功: $normalizedPath")
+                } else {
+                    diskShare.rm(normalizedPath)
+                    Log.d(TAG, "文件删除成功: $normalizedPath")
                 }
             }
         } catch (e: IOException) {

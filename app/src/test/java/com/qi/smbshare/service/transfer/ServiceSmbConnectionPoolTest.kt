@@ -4,6 +4,10 @@ import com.hierynomus.smbj.share.DiskShare
 import com.qi.smbshare.data.model.SMBConfig
 import io.mockk.mockk
 import java.io.IOException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertSame
@@ -25,12 +29,29 @@ class ServiceSmbConnectionPoolTest {
         }
         val config = sampleConfig("config-1")
 
-        val first = pool.acquire(config)
+        val first = runBlocking { pool.acquire(config) }
         pool.release(config)
-        val second = pool.acquire(config)
+        val second = runBlocking { pool.acquire(config) }
 
         assertSame(first, second)
         assertEquals(1, fakeConnection.connectCount)
+    }
+
+    @Test
+    fun `concurrent acquire for same config connects only once`() = runBlocking {
+        val fakeConnection = FakeServiceSmbConnection(connectDelayMillis = 50L)
+        val pool = ServiceSmbConnectionPool().apply {
+            connectionFactory = { fakeConnection }
+        }
+        val config = sampleConfig("config-concurrent")
+
+        val shares = List(8) {
+            async { pool.acquire(config) }
+        }.awaitAll()
+
+        shares.forEach { assertSame(shares.first(), it) }
+        assertEquals(1, fakeConnection.connectCount)
+        repeat(shares.size) { pool.release(config) }
     }
 
     @Test
@@ -44,7 +65,7 @@ class ServiceSmbConnectionPoolTest {
         }
         val config = sampleConfig("config-expired")
 
-        pool.acquire(config)
+        runBlocking { pool.acquire(config) }
         pool.release(config)
         now = 101L
         pool.closeIdleConnections()
@@ -62,7 +83,7 @@ class ServiceSmbConnectionPoolTest {
             idleTimeoutMillis = 100L
         }
 
-        pool.acquire(sampleConfig("config-active"))
+        runBlocking { pool.acquire(sampleConfig("config-active")) }
         now = 1_000L
         pool.closeIdleConnections()
 
@@ -80,7 +101,7 @@ class ServiceSmbConnectionPoolTest {
         }
 
         assertThrows(IOException::class.java) {
-            pool.acquire(sampleConfig("config-failure"))
+            runBlocking { pool.acquire(sampleConfig("config-failure")) }
         }
 
         now = 101L
@@ -101,9 +122,9 @@ class ServiceSmbConnectionPoolTest {
         val config = sampleConfig("config-retry")
 
         assertThrows(IOException::class.java) {
-            pool.acquire(config)
+            runBlocking { pool.acquire(config) }
         }
-        pool.acquire(config)
+        runBlocking { pool.acquire(config) }
         pool.release(config)
         now = 101L
         pool.closeIdleConnections()
@@ -120,11 +141,11 @@ class ServiceSmbConnectionPoolTest {
         }
         val config = sampleConfig("config-reconnect")
 
-        pool.acquire(config)
+        runBlocking { pool.acquire(config) }
         pool.release(config)
         fakeConnection.forceDisconnected()
 
-        pool.acquire(config)
+        runBlocking { pool.acquire(config) }
 
         assertEquals(2, fakeConnection.connectCount)
         assertEquals(1, fakeConnection.disconnectCount)
@@ -139,7 +160,8 @@ class ServiceSmbConnectionPoolTest {
     }
 
     private class FakeServiceSmbConnection(
-        private var failuresBeforeSuccess: Int = 0
+        private var failuresBeforeSuccess: Int = 0,
+        private val connectDelayMillis: Long = 0L
     ) : ServiceSmbConnection {
         private val share = mockk<DiskShare>(relaxed = true)
         var connectCount = 0
@@ -147,7 +169,10 @@ class ServiceSmbConnectionPoolTest {
         var disconnected = false
         private var connected = false
 
-        override fun connect(config: SMBConfig): DiskShare {
+        override suspend fun connect(config: SMBConfig): DiskShare {
+            if (connectDelayMillis > 0) {
+                delay(connectDelayMillis)
+            }
             connectCount++
             if (failuresBeforeSuccess > 0) {
                 failuresBeforeSuccess--

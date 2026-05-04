@@ -139,6 +139,70 @@ class TransferManagerViewModel @Inject constructor(
 ) : AndroidViewModel(application)
 ```
 
+### 场景：后台传输 SMB 连接池并发租约
+
+#### 1. Scope / Trigger
+
+- 触发：修改 `service/transfer/ServiceSmbConnectionPool`、`DownloadExecutor`、`UploadExecutor` 或后台传输 SMB 连接获取/释放逻辑。
+- 目标：同一配置 ID 的并发下载/上传复用同一个 Service 级 SMB 连接，不重复建连，不在其他任务仍持有租约时关闭共享。
+
+#### 2. Signatures
+
+- `ServiceSmbConnectionProvider.acquire(config: SMBConfig): DiskShare` 是 `suspend` 函数。
+- `ServiceSmbConnectionProvider.release(config: SMBConfig)` 在成功获取连接后的 `finally` 中调用。
+- `ServiceSmbConnection.connect(config: SMBConfig): DiskShare` 是 `suspend` 函数。
+
+#### 3. Contracts
+
+- `acquire()` 对同一 `config.id` 的建连过程必须串行化；并发调用只能触发一次真实 `connect()`。
+- 连接尝试期间应先把 bucket 计为活跃租约，避免空闲清理关闭正在建连的 bucket。
+- `connect()` 失败时必须撤销本次活跃租约计数，使 bucket 可被后续空闲清理回收。
+- stale/disconnected bucket 重新连接前应关闭旧连接，再建立新共享。
+- 执行器只在 `acquire()` 成功后才拥有租约；失败路径不能留下活跃租约。
+
+#### 4. Validation & Error Matrix
+
+- 同一配置并发 `acquire()` -> 返回同一个 `DiskShare`，真实连接次数为 1。
+- `connect()` 失败 -> 抛出原始连接异常，活跃租约计数回到 0，超时后可清理。
+- 活跃租约存在 -> `closeIdleConnections()` 不关闭该 bucket。
+- 连接已断开但 bucket 仍存在 -> 下一次 `acquire()` 先关闭 stale 连接再重连。
+
+#### 5. Good/Base/Bad Cases
+
+- Good：8 个同配置下载任务同时启动，只建立 1 条 Service 级 SMB 连接，完成后各自 `release()`。
+- Base：同配置串行下载复用同一个 `DiskShare`。
+- Bad：把 `connect()` 放在普通同步锁外但没有 per-bucket 串行保护，导致并发任务重复连接。
+- Bad：连接尚未成功时 bucket 仍显示空闲，空闲清理可能关闭正在建连的对象。
+
+#### 6. Tests Required
+
+- 单测覆盖同配置并发 `acquire()` 只调用一次 `connect()`。
+- 单测覆盖失败 acquire 不泄漏活跃租约，之后 idle cleanup 可关闭 bucket。
+- 单测覆盖 stale disconnected bucket 重新 acquire 前关闭旧连接。
+- 修改 `DownloadExecutor` 或 `UploadExecutor` 的连接获取路径时，运行 `./gradlew :app:testDebugUnitTest`。
+
+#### 7. Wrong vs Correct
+
+Wrong：
+
+```kotlin
+val bucket = synchronized(lock) { buckets.getOrPut(config.id) { Bucket(connectionFactory()) } }
+val share = bucket.connection.connect(config)
+bucket.activeLeases += 1
+```
+
+Correct：
+
+```kotlin
+val bucket = synchronized(lock) {
+    buckets.getOrPut(config.id) { Bucket(connectionFactory()) }
+        .also { it.activeLeases += 1 }
+}
+return bucket.connectMutex.withLock {
+    bucket.diskShare ?: bucket.connection.connect(config)
+}
+```
+
 ### 局域网发现与平台网络能力
 
 将局域网发现、mDNS、NetBIOS/NBT、端口探测和本机网络环境探测放在 `data/discovery/` 下。这里属于 Android 平台网络能力和纯协议解析的边界层，不要放进 Composable。

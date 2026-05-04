@@ -74,6 +74,8 @@ class TransferStreamCopier(
     companion object {
         const val DEFAULT_PROGRESS_UPDATE_INTERVAL_MILLIS = 1000L
         const val DEFAULT_BUFFER_SIZE = 256 * 1024
+        /** 预览场景使用较小缓冲区，避免 ViewModel 内单次分配过大堆内存 */
+        const val PREVIEW_BUFFER_SIZE = 64 * 1024
 
         fun calculateProgress(transferredBytes: Long, fileSize: Long): Int {
             return if (fileSize > 0) {
