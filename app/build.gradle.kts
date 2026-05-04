@@ -10,6 +10,25 @@ android {
     namespace = "com.qi.smbshare"
     compileSdk = 36
 
+    val releaseStoreFilePath = providers.gradleProperty("SMB_SHARE_RELEASE_STORE_FILE")
+        .orElse(providers.environmentVariable("SMB_SHARE_RELEASE_STORE_FILE"))
+        .orNull
+    val releaseStorePassword = providers.gradleProperty("SMB_SHARE_RELEASE_STORE_PASSWORD")
+        .orElse(providers.environmentVariable("SMB_SHARE_RELEASE_STORE_PASSWORD"))
+        .orNull
+    val releaseKeyAlias = providers.gradleProperty("SMB_SHARE_RELEASE_KEY_ALIAS")
+        .orElse(providers.environmentVariable("SMB_SHARE_RELEASE_KEY_ALIAS"))
+        .orNull
+    val releaseKeyPassword = providers.gradleProperty("SMB_SHARE_RELEASE_KEY_PASSWORD")
+        .orElse(providers.environmentVariable("SMB_SHARE_RELEASE_KEY_PASSWORD"))
+        .orNull
+    val hasReleaseSigningConfig = listOf(
+        releaseStoreFilePath,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword
+    ).all { !it.isNullOrBlank() }
+
     defaultConfig {
         applicationId = "com.qi.smbshare"
         minSdk = 28
@@ -21,20 +40,13 @@ android {
     }
 
     signingConfigs {
-        val sharedKeystore = file("keystore/smb_share.jks")
-        fun com.android.build.api.dsl.SigningConfig.applySmbShareKey() {
-            // 调试与发布统一使用同一份签名，便于快速验证线上行为
-            storeFile = sharedKeystore
-            storePassword = "smb123456"
-            keyAlias = "key0"
-            keyPassword = "smb123456"
-        }
-
         create("release") {
-            applySmbShareKey()
-        }
-        getByName("debug") {
-            applySmbShareKey()
+            if (hasReleaseSigningConfig) {
+                storeFile = file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -49,7 +61,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseSigningConfig) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             // 生成原生调试符号文件，用于 Google Play 崩溃分析
             ndk {
                 debugSymbolLevel = "FULL"

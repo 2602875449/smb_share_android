@@ -49,6 +49,8 @@ class FileListViewModel @AssistedInject constructor(
     @Assisted initialPath: String
 ) : AndroidViewModel(application) {
     private var previewJob: Job? = null
+    private var loadFilesJob: Job? = null
+    private var loadFilesRequestId = 0L
 
     private val initialBrowserPath = initialPath.trim('\\', '/')
     private val _state = MutableStateFlow(
@@ -161,10 +163,7 @@ class FileListViewModel @AssistedInject constructor(
     private fun connectAndLoadFiles() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
-            // 在IO线程执行网络操作
-            withContext(Dispatchers.IO) {
-                connectUseCase.execute(config)
-            }
+            connectUseCase.execute(config)
                 .onSuccess {
                     loadFiles()
                     // 连接成功后保存最后访问的服务器和路径
@@ -186,46 +185,50 @@ class FileListViewModel @AssistedInject constructor(
      * 确保连接有效，如果断开则重新连接
      */
     private suspend fun ensureConnected(forceReconnect: Boolean = false): Result<Unit> {
-        return withContext(Dispatchers.IO) {
-            if (forceReconnect || !connectUseCase.isConnected()) {
-                connectUseCase.execute(config)
-            } else {
-                Result.success(Unit)
-            }
+        return if (forceReconnect || !connectUseCase.isConnected()) {
+            connectUseCase.execute(config)
+        } else {
+            Result.success(Unit)
         }
     }
 
     private fun loadFiles() {
-        viewModelScope.launch {
+        val requestId = ++loadFilesRequestId
+        val requestPath = _state.value.currentPath
+        loadFilesJob?.cancel()
+        loadFilesJob = viewModelScope.launch {
             _state.value = _state.value.copy(
                 isLoading = true,
                 error = null,
                 connectionErrorType = null
             )
 
-            ensureConnected()
-                .onFailure { e ->
-                    val errorMessage = formatError(e, R.string.error_reconnect_failed)
-                    val errorType = classifyErrorType(e)
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        error = errorMessage,
-                        connectionErrorType = errorType.takeIf { shouldReturnToConnection(it) }
-                    )
-                    return@launch
-                }
+            val connectionResult = ensureConnected()
+            if (!isLatestLoadFilesRequest(requestId)) return@launch
+            connectionResult.onFailure { e ->
+                val errorMessage = formatError(e, R.string.error_reconnect_failed)
+                val errorType = classifyErrorType(e)
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = errorMessage,
+                    connectionErrorType = errorType.takeIf { shouldReturnToConnection(it) }
+                )
+                return@launch
+            }
 
-            val result = loadFilesOnce(_state.value.currentPath)
+            val result = loadFilesOnce(requestPath)
             val finalResult = if (result.isFailure && shouldReconnectAndRetry(result.exceptionOrNull())) {
                 // SMBJ 有时在共享已被服务端关闭后仍保留对象引用，重连后重试一次即可恢复刷新。
                 ensureConnected(forceReconnect = true)
                     .fold(
-                        onSuccess = { loadFilesOnce(_state.value.currentPath) },
+                        onSuccess = { loadFilesOnce(requestPath) },
                         onFailure = { Result.failure(it) }
                     )
             } else {
                 result
             }
+
+            if (!isLatestLoadFilesRequest(requestId)) return@launch
 
             finalResult
                 .onSuccess { files ->
@@ -245,9 +248,11 @@ class FileListViewModel @AssistedInject constructor(
     }
 
     private suspend fun loadFilesOnce(path: String): Result<List<FileItem>> {
-        return withContext(Dispatchers.IO) {
-            listFilesUseCase.execute(path)
-        }
+        return listFilesUseCase.execute(path)
+    }
+
+    private fun isLatestLoadFilesRequest(requestId: Long): Boolean {
+        return requestId == loadFilesRequestId
     }
 
     private fun shouldReconnectAndRetry(error: Throwable?): Boolean {
@@ -748,7 +753,9 @@ class FileListViewModel @AssistedInject constructor(
     override fun onCleared() {
         super.onCleared()
         previewJob?.cancel()
+        loadFilesJob?.cancel()
         previewJob = null
+        loadFilesJob = null
         clearReadyPreviewCache()
         connectUseCase.disconnect()
     }

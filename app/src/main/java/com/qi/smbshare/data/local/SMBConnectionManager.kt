@@ -17,7 +17,9 @@ class SMBConnectionManager {
     private var session: Session? = null
     private var diskShare: DiskShare? = null
     private val client = SMBClient()
-    private val connectionLock = Any()
+    private val connectionLock = java.lang.Object()
+    private var activeDiskShareLeases = 0
+    private var isDiskShareLifecycleChanging = false
 
     /**
      * 连接到SMB服务器
@@ -27,6 +29,8 @@ class SMBConnectionManager {
         synchronized(connectionLock) {
             try {
                 // 断开现有连接；连接三元组必须在同一把锁下更新，避免并发读取到半初始化状态。
+                isDiskShareLifecycleChanging = true
+                waitForDiskShareLeasesLocked()
                 disconnectLocked()
 
                 // 创建连接
@@ -68,6 +72,9 @@ class SMBConnectionManager {
                 Log.e(TAG, "错误堆栈:", e)
                 disconnectLocked()
                 throw IOException("连接SMB服务器失败: ${e.message}", e)
+            } finally {
+                isDiskShareLifecycleChanging = false
+                connectionLock.notifyAll()
             }
         }
     }
@@ -77,6 +84,26 @@ class SMBConnectionManager {
      */
     fun getDiskShare(): DiskShare? {
         return synchronized(connectionLock) { diskShare }
+    }
+
+    @Throws(IOException::class)
+    fun acquireDiskShare(): DiskShareLease {
+        return synchronized(connectionLock) {
+            val currentShare = diskShare
+            if (currentShare == null || isDiskShareLifecycleChanging) {
+                Log.e(TAG, "获取共享连接失败: 未连接到SMB服务器")
+                throw IOException("未连接到SMB服务器")
+            }
+            activeDiskShareLeases++
+            DiskShareLease(currentShare, this)
+        }
+    }
+
+    @Throws(IOException::class)
+    inline fun <T> withDiskShare(action: (DiskShare) -> T): T {
+        acquireDiskShare().use { lease ->
+            return action(lease.diskShare)
+        }
     }
 
     /**
@@ -97,7 +124,35 @@ class SMBConnectionManager {
      */
     fun disconnect() {
         synchronized(connectionLock) {
-            disconnectLocked()
+            try {
+                isDiskShareLifecycleChanging = true
+                waitForDiskShareLeasesLocked()
+                disconnectLocked()
+            } finally {
+                isDiskShareLifecycleChanging = false
+                connectionLock.notifyAll()
+            }
+        }
+    }
+
+    private fun releaseDiskShareLease() {
+        synchronized(connectionLock) {
+            activeDiskShareLeases--
+            connectionLock.notifyAll()
+        }
+    }
+
+    private fun waitForDiskShareLeasesLocked() {
+        var interrupted = false
+        while (activeDiskShareLeases > 0) {
+            try {
+                connectionLock.wait()
+            } catch (e: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt()
         }
     }
 
@@ -215,6 +270,20 @@ class SMBConnectionManager {
                 Log.w(TAG, "关闭连接时出错: ${e.message}")
             }
             Log.d(TAG, "========== 测试连接结束 ==========")
+        }
+    }
+
+    class DiskShareLease internal constructor(
+        val diskShare: DiskShare,
+        private val manager: SMBConnectionManager
+    ) : AutoCloseable {
+        private var closed = false
+
+        @Synchronized
+        override fun close() {
+            if (closed) return
+            closed = true
+            manager.releaseDiskShareLease()
         }
     }
 }

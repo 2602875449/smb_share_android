@@ -38,11 +38,11 @@ class SMBFileRepositoryTest {
 
     @Before
     fun setUp() {
-        connectionManager = mockk()
+        connectionManager = SMBConnectionManager()
         diskShare = mockk()
         repository = SMBFileRepository(connectionManager)
 
-        every { connectionManager.getDiskShare() } returns diskShare
+        connectionManager.setPrivateField("diskShare", diskShare)
     }
 
     @Test
@@ -98,5 +98,11 @@ class SMBFileRepositoryTest {
         }
 
         verify(exactly = 1) { smbFile.close() }
+    }
+
+    private fun SMBConnectionManager.setPrivateField(name: String, value: Any?) {
+        val field = SMBConnectionManager::class.java.getDeclaredField(name)
+        field.isAccessible = true
+        field.set(this, value)
     }
 }

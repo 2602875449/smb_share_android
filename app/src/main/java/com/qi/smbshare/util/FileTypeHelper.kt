@@ -1,10 +1,13 @@
 package com.qi.smbshare.util
 
-import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Date
-import java.util.Locale
 
 object FileTypeHelper {
+    private val dateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
     private val previewVideoExtensions = setOf(
         "mp4", "m4v", "3gp", "3g2", "webm", "mkv",
         "ts", "mts", "m2ts", "flv", "vob", "mpg", "mpeg"
@@ -78,8 +81,9 @@ object FileTypeHelper {
      * @return 格式化后的日期时间字符串，格式为 "yyyy-MM-dd HH:mm"
      */
     fun formatTimestamp(timestamp: Long): String {
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-        return dateFormat.format(Date(timestamp))
+        return Instant.ofEpochMilli(timestamp)
+            .atZone(ZoneId.systemDefault())
+            .format(dateTimeFormatter)
     }
 
     /**
@@ -88,7 +92,6 @@ object FileTypeHelper {
      * @return 格式化后的日期时间字符串，格式为 "yyyy-MM-dd HH:mm"
      */
     fun formatDate(date: Date): String {
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-        return dateFormat.format(date)
+        return formatTimestamp(date.time)
     }
 }

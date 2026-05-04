@@ -4,6 +4,9 @@ import android.util.Log
 import com.qi.smbshare.data.repository.SMBFileRepository
 import java.io.IOException
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val TAG = "DeleteFileUseCase"
 
@@ -15,12 +18,16 @@ class DeleteFileUseCase @Inject constructor(
         Log.d(TAG, "路径: $path")
         
         return try {
-            fileRepository.deleteFileOrFolder(path)
+            withContext(Dispatchers.IO) {
+                fileRepository.deleteFileOrFolder(path)
+            }
             Log.d(TAG, "UseCase: 删除成功")
             Result.success(Unit)
         } catch (e: IOException) {
             Log.e(TAG, "UseCase: 删除IO异常", e)
             Result.failure(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "UseCase: 删除异常", e)
             val ioException = IOException("删除失败: ${e.message}", e)

@@ -5,6 +5,9 @@ import com.qi.smbshare.data.repository.SMBFileRepository
 import java.io.File
 import java.io.IOException
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val TAG = "UploadFileUseCase"
 
@@ -21,12 +24,16 @@ class UploadFileUseCase @Inject constructor(
         Log.d(TAG, "远程路径: $remotePath")
         
         return try {
-            fileRepository.uploadFile(localFile, remotePath, onProgress)
+            withContext(Dispatchers.IO) {
+                fileRepository.uploadFile(localFile, remotePath, onProgress)
+            }
             Log.d(TAG, "UseCase: 文件上传成功")
             Result.success(Unit)
         } catch (e: IOException) {
             Log.e(TAG, "UseCase: 上传文件IO异常", e)
             Result.failure(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "UseCase: 上传文件异常", e)
             val ioException = IOException("上传文件失败: ${e.message}", e)

@@ -69,6 +69,65 @@ SMB repository 执行具体 SMB 操作，并在工作失败时抛出带中文操
 
 保留现有 SMB 路径行为。常规功能工作中不要引入新的路径抽象。
 
+### 场景：SMB 共享连接生命周期租约
+
+#### 1. Scope / Trigger
+
+- Trigger: repository 或 service 执行 SMBJ `DiskShare` 文件操作, 且同一连接可能被刷新、断开或重连。
+
+#### 2. Signatures
+
+- `SMBConnectionManager.acquireDiskShare(): SMBConnectionManager.DiskShareLease`
+- `SMBConnectionManager.withDiskShare(action: (DiskShare) -> T): T`
+- `SMBConnectionManager.DiskShareLease.close()`
+
+#### 3. Contracts
+
+- repository 不应直接长期持有裸 `DiskShare`; 普通同步操作使用 `withDiskShare { ... }`。
+- 返回远端流这类跨函数边界的操作必须使用 `acquireDiskShare()` 获取租约, 并让返回对象的 `close()` 同时释放 SMBJ 文件句柄和租约。
+- `disconnect()` / `connect()` 在关闭当前共享前等待活动租约归还, 避免操作期间关闭半活跃 `DiskShare`。
+- `disconnect()` / `connect()` 已进入生命周期切换后不得继续发放旧 `DiskShare` 的新租约, 避免重连被新文件操作插队。
+- acquire 失败时抛出 `IOException("未连接到SMB服务器")`。
+
+#### 4. Validation & Error Matrix
+
+- 无当前共享 -> `acquireDiskShare()` 抛出 `IOException("未连接到SMB服务器")`。
+- 文件操作中调用 disconnect/reconnect -> 等待活动租约关闭后再关闭共享。
+- disconnect/reconnect 等待期间的新文件操作 -> `acquireDiskShare()` 抛出 `IOException("未连接到SMB服务器")`, 不绑定旧共享。
+- 返回流关闭 -> 先关闭输入流和 SMBJ `File`, 再释放租约。
+- 打开流失败 -> 关闭已打开的 SMBJ `File`, 释放租约, 再包装为操作级 `IOException`。
+
+#### 5. Good/Base/Bad Cases
+
+- Good: `SMBFileRepository.getFileInputStream()` 返回的流关闭时同时关闭远端 `File` 和 `DiskShareLease`。
+- Base: `listFiles()`、`getFileSize()`、`createFolder()` 等短操作用 `withDiskShare` 包住完整 SMBJ 调用。
+- Bad: `val share = connectionManager.getDiskShare()` 后在锁外执行远端 IO。
+- Bad: 返回 `file.inputStream` 但没有把租约释放绑定到返回流 `close()`。
+
+#### 6. Tests Required
+
+- 单测断言活动租约存在时 `disconnect()` 不关闭共享, 租约关闭后才关闭。
+- 单测断言返回流重复关闭只释放一次远端 `File` 句柄和租约。
+- 单测断言 `inputStream` 创建失败时仍关闭远端 `File` 并释放租约。
+- 修改 repository SMB 操作时, 补充或更新单测覆盖对应租约边界。
+
+#### 7. Wrong vs Correct
+
+Wrong：
+
+```kotlin
+val diskShare = connectionManager.getDiskShare() ?: throw IOException("未连接到SMB服务器")
+return diskShare.getFileInformation(path).standardInformation.endOfFile
+```
+
+Correct：
+
+```kotlin
+return connectionManager.withDiskShare { diskShare ->
+    diskShare.getFileInformation(path).standardInformation.endOfFile
+}
+```
+
 ### 场景：SMB 预览流句柄释放
 
 #### 1. Scope / Trigger

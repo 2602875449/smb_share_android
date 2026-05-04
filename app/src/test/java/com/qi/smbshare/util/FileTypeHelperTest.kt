@@ -156,4 +156,14 @@ class FileTypeHelperTest {
         val result = FileTypeHelper.formatDate(Date(1700000000000L))
         assertTrue("格式应为 yyyy-MM-dd HH:mm", result.matches(Regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")))
     }
+
+    @Test
+    fun `formatDate 与 formatTimestamp 使用相同格式化结果`() {
+        val timestamp = 1700000000000L
+
+        assertEquals(
+            FileTypeHelper.formatTimestamp(timestamp),
+            FileTypeHelper.formatDate(Date(timestamp))
+        )
+    }
 }

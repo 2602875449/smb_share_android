@@ -4,6 +4,9 @@ import android.util.Log
 import com.qi.smbshare.data.repository.SMBFileRepository
 import java.io.IOException
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val TAG = "CreateFolderUseCase"
 
@@ -19,12 +22,16 @@ class CreateFolderUseCase @Inject constructor(
         Log.d(TAG, "父路径: $parentPath")
         
         return try {
-            fileRepository.createFolder(folderName, parentPath)
+            withContext(Dispatchers.IO) {
+                fileRepository.createFolder(folderName, parentPath)
+            }
             Log.d(TAG, "UseCase: 文件夹创建成功")
             Result.success(Unit)
         } catch (e: IOException) {
             Log.e(TAG, "UseCase: 创建文件夹IO异常", e)
             Result.failure(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "UseCase: 创建文件夹异常", e)
             val ioException = IOException("创建文件夹失败: ${e.message}", e)
