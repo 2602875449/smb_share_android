@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "质量检查需要按项目规范索引确认适用规则。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查错误处理、Result 传递和 UI 错误展示是否一致。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 Kotlin、Compose 状态、主题和测试验证。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查日志级别和敏感信息边界。"}
