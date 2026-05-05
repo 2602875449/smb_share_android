@@ -34,10 +34,10 @@ android {
         minSdk = 28
         targetSdk = 36
         val versionNameStr = providers.gradleProperty("versionName").orElse("1.0.0").get()
-        val versionParts = versionNameStr.split(".").map { it.toIntOrNull() ?: 0 }
-        val major = versionParts.getOrElse(0) { 0 }
-        val minor = versionParts.getOrElse(1) { 0 }
-        val patch = versionParts.getOrElse(2) { 0 }
+        val versionParts = versionNameStr.split(".")
+        val major = versionParts.getOrNull(0)?.toIntOrNull() ?: 0
+        val minor = versionParts.getOrNull(1)?.toIntOrNull() ?: 0
+        val patch = versionParts.getOrNull(2)?.toIntOrNull() ?: 0
         versionCode = major * 10000 + minor * 100 + patch
         versionName = versionNameStr
 
