@@ -12,6 +12,7 @@
 - Android Studio Iguana（或更高版本）。
 - Android Gradle Plugin 8.x 与兼容的 Gradle 版本（项目已配置在 `build.gradle.kts` 与 `settings.gradle.kts` 中）。
 - 推荐使用 JDK 17。
+- 运行设备需要 **Android 9（API 28）或更高版本**。
 
 ## 快速开始
 1. 使用 Android Studio 打开项目根目录。
@@ -40,4 +41,4 @@
 ```
 
 ## 许可证
-仓库未显式声明许可证，如需对外发布请先确认授权策略。
+本项目基于 [MIT License](LICENSE) 开源，你可以自由使用、修改和分发，但须保留原始版权声明。
