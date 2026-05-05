@@ -16,3 +16,13 @@ local.properties
 /app/release
 /.idea
 /gradle/gradle-daemon-jvm.properties
+# Keystore（签名私钥，禁止提交到版本库）
+/app/keystore/
+
+# AI 协作工具私有配置（对外部贡献者无意义）
+/.trellis/
+/.windsurf/
+/.agents/
+/.cursor/
+/.codex/
+/.claude/
