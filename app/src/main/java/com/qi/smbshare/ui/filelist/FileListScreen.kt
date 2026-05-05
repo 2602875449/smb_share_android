@@ -3,7 +3,6 @@ package com.qi.smbshare.ui.filelist
 import android.content.ClipData
 import android.content.Intent
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -293,13 +292,8 @@ fun FileListScreen(
         }
     }
 
-    // 文件夹层级返回保持原逻辑；根目录返回连接页时参与预测式返回动画。
-    BackHandler(enabled = state.canGoBack) {
-        handleFileListBack()
-    }
-
+    // 所有层级返回统一走预测式返回动画，包括子目录返回上级
     PredictiveBackAnimatedContent(
-        enabled = !state.canGoBack,
         onBack = handleFileListBack
     ) { predictiveBackModifier ->
         Scaffold(
