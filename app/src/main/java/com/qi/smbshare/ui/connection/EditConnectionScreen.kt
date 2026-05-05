@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -185,18 +186,13 @@ fun EditConnectionScreen(
                         }
                     )
 
-                    // 共享名称
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = state.formShareName,
-                        onValueChange = {
-                            viewModel.handleIntent(
-                                ConnectionIntent.UpdateFormField(FormField.SHARE_NAME, it)
-                            )
-                        },
-                        label = { Text(stringResource(R.string.label_share_name)) },
-                        singleLine = true,
-                        leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) }
+                    ShareNameSection(
+                        state = state,
+                        onFetchShares = { viewModel.handleIntent(ConnectionIntent.FetchShares) },
+                        onSelectShare = { name -> viewModel.handleIntent(ConnectionIntent.SelectShare(name)) },
+                        onShareNameChange = { name ->
+                            viewModel.handleIntent(ConnectionIntent.UpdateFormField(FormField.SHARE_NAME, name))
+                        }
                     )
 
                     // 匿名登录开关
@@ -464,6 +460,127 @@ private fun SmbDiscoveryHost.discoverySourceLabel(): String {
             SmbDiscoverySource.MDNS -> mdnsLabel
             SmbDiscoverySource.NETBIOS -> netBiosLabel
             SmbDiscoverySource.MANUAL -> manualLabel
+        }
+    }
+}
+
+@Composable
+private fun ShareNameSection(
+    state: ConnectionState,
+    onFetchShares: () -> Unit,
+    onSelectShare: (String) -> Unit,
+    onShareNameChange: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = stringResource(R.string.section_share_name),
+                style = MaterialTheme.typography.titleSmall
+            )
+            OutlinedButton(
+                onClick = onFetchShares,
+                enabled = state.formServerAddress.isNotEmpty() && !state.isFetchingShares
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.btn_fetch_shares))
+            }
+        }
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = state.formShareName,
+            onValueChange = onShareNameChange,
+            label = { Text(stringResource(R.string.label_share_name)) },
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) }
+        )
+        if (state.isFetchingShares) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        if (state.shareFetchError != null && !state.isFetchingShares) {
+            Text(
+                text = state.shareFetchError,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+        if (
+            state.hasFetchedShares &&
+            state.availableShares.isEmpty() &&
+            state.shareFetchError == null &&
+            !state.isFetchingShares
+        ) {
+            Text(
+                text = stringResource(R.string.shares_empty_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        state.availableShares.forEach { shareName ->
+            val isSelected = shareName == state.formShareName
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelectShare(shareName) },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSelected)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.surfaceContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = if (isSelected)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = shareName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isSelected)
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            else
+                                MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        TextButton(onClick = { onSelectShare(shareName) }) {
+                            Text(stringResource(R.string.share_item_select))
+                        }
+                    }
+                }
+            }
         }
     }
 }

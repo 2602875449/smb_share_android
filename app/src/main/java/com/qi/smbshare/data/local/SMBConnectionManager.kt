@@ -173,6 +173,15 @@ class SMBConnectionManager {
     }
 
     /**
+     * 枚举服务器上的可用磁盘共享（不影响主连接状态）。
+     * 使用独立的 SMBClient 实例，避免与主连接的 ServerList 连接池产生复用冲突。
+     */
+    @Throws(IOException::class)
+    fun listShares(config: SMBConfig): List<String> {
+        return SmbShareEnumerator(SMBClient()).listShares(config)
+    }
+
+    /**
      * 测试连接
      */
     @Throws(IOException::class)

@@ -93,7 +93,11 @@ class ConnectionViewModel @Inject constructor(
                 _state.value = _state.value.copy(discoveryError = null)
             }
             is ConnectionIntent.ClearError -> {
-                _state.value = _state.value.copy(error = null, testResult = null, discoveryError = null)
+                _state.value = _state.value.copy(
+                    error = null,
+                    testResult = null,
+                    discoveryError = null
+                )
             }
             is ConnectionIntent.ClearForm -> {
                 stopDiscovery()
@@ -103,7 +107,7 @@ class ConnectionViewModel @Inject constructor(
                     hasDiscoveryStarted = false,
                     discoveredHosts = emptyList(),
                     discoveryError = null
-                )
+                ).withoutShareFetchResult()
             }
             is ConnectionIntent.EditConfig -> {
                 stopDiscovery()
@@ -113,7 +117,7 @@ class ConnectionViewModel @Inject constructor(
                     hasDiscoveryStarted = false,
                     discoveredHosts = emptyList(),
                     discoveryError = null
-                )
+                ).withoutShareFetchResult()
             }
             is ConnectionIntent.NavigateToNewConnection -> {
                 _state.value = _state.value.copy(navigateToEdit = SMBConfig(serverAddress = "", shareName = ""))
@@ -127,6 +131,8 @@ class ConnectionViewModel @Inject constructor(
             is ConnectionIntent.ClearRestoredLastAccess -> {
                 _state.value = _state.value.copy(restoredLastAccess = null)
             }
+            is ConnectionIntent.FetchShares -> fetchShares()
+            is ConnectionIntent.SelectShare -> selectShare(intent.shareName)
         }
     }
 
@@ -348,7 +354,7 @@ class ConnectionViewModel @Inject constructor(
             port = host.port,
             shareName = ""
         )
-        _state.value = _state.value.copy(currentConfig = newConfig)
+        _state.value = _state.value.copy(currentConfig = newConfig).withoutShareFetchResult()
     }
 
     private fun updateFormField(field: FormField, value: String) {
@@ -370,7 +376,12 @@ class ConnectionViewModel @Inject constructor(
             FormField.PASSWORD -> current?.copy(password = value)
                 ?: SMBConfig(password = value, serverAddress = "", shareName = "")
         }
-        _state.value = _state.value.copy(currentConfig = newConfig)
+        val nextState = _state.value.copy(currentConfig = newConfig)
+        _state.value = if (field.invalidatesShareFetchResult()) {
+            nextState.withoutShareFetchResult()
+        } else {
+            nextState
+        }
     }
 
     private fun toggleAnonymous() {
@@ -386,7 +397,114 @@ class ConnectionViewModel @Inject constructor(
         _state.value = _state.value.copy(
             isAnonymous = newAnonymous,
             currentConfig = newConfig
+        ).withoutShareFetchResult()
+    }
+
+    private fun fetchShares() {
+        val request = ShareFetchRequest.from(_state.value) ?: return
+
+        // 用当前表单数据临时构建配置，仅用于查询共享列表
+        val current = _state.value.currentConfig
+        val tempConfig = current?.copy(
+            serverAddress = request.serverAddress,
+            port = request.port,
+            username = request.username,
+            password = request.password,
+            isAnonymous = request.isAnonymous
+        ) ?: SMBConfig(
+            serverAddress = request.serverAddress,
+            port = request.port,
+            username = request.username,
+            password = request.password,
+            isAnonymous = request.isAnonymous
         )
+
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                isFetchingShares = true,
+                availableShares = emptyList(),
+                hasFetchedShares = false,
+                shareFetchError = null
+            )
+            withContext(ioDispatcher) {
+                connectUseCase.listShares(tempConfig)
+            }
+                .onSuccess { shares ->
+                    if (!request.matches(_state.value)) return@launch
+                    _state.value = _state.value.copy(
+                        isFetchingShares = false,
+                        availableShares = shares,
+                        hasFetchedShares = true,
+                        shareFetchError = null
+                    )
+                }
+                .onFailure { e ->
+                    if (!request.matches(_state.value)) return@launch
+                    Log.w(TAG, "获取共享列表失败，可继续手动填写共享名称: ${e.javaClass.simpleName}: ${e.message}")
+                    _state.value = _state.value.copy(
+                        isFetchingShares = false,
+                        hasFetchedShares = true,
+                        shareFetchError = text(R.string.error_fetch_shares_failed)
+                    )
+                }
+        }
+    }
+
+    private fun selectShare(shareName: String) {
+        val current = _state.value.currentConfig
+        val newConfig = current?.copy(shareName = shareName)
+            ?: SMBConfig(
+                serverAddress = _state.value.formServerAddress,
+                shareName = shareName
+            )
+        _state.value = _state.value.copy(currentConfig = newConfig)
+    }
+
+    private fun ConnectionState.withoutShareFetchResult(): ConnectionState {
+        return copy(
+            availableShares = emptyList(),
+            isFetchingShares = false,
+            hasFetchedShares = false,
+            shareFetchError = null
+        )
+    }
+
+    private fun FormField.invalidatesShareFetchResult(): Boolean {
+        return when (this) {
+            FormField.SERVER_ADDRESS,
+            FormField.PORT,
+            FormField.USERNAME,
+            FormField.PASSWORD -> true
+            FormField.NAME,
+            FormField.SHARE_NAME -> false
+        }
+    }
+
+    private data class ShareFetchRequest(
+        val serverAddress: String,
+        val port: Int,
+        val username: String,
+        val password: String,
+        val isAnonymous: Boolean
+    ) {
+        fun matches(state: ConnectionState): Boolean {
+            return this == from(state)
+        }
+
+        companion object {
+            fun from(state: ConnectionState): ShareFetchRequest? {
+                val serverAddress = state.formServerAddress
+                if (serverAddress.isEmpty()) return null
+                val isAnonymous = state.isAnonymous
+                return ShareFetchRequest(
+                    serverAddress = serverAddress,
+                    port = state.formPort.toIntOrNull() ?: 445,
+                    username = if (isAnonymous) "" else state.formUsername,
+                    password = if (isAnonymous) "" else state.formPassword,
+                    isAnonymous = isAnonymous
+                )
+            }
+        }
     }
 
     private fun text(@StringRes resId: Int): String {

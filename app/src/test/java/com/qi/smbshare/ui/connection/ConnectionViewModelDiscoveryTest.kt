@@ -17,6 +17,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -223,19 +224,164 @@ class ConnectionViewModelDiscoveryTest {
         coVerify(exactly = 1) { connectionRepository.getLastAccess() }
     }
 
+    @Test
+    fun `FetchShares 成功后展示可选共享并允许选用`() = runTest(dispatcher) {
+        val connectUseCase = mockk<ConnectSMBUseCase>(relaxed = true)
+        coEvery { connectUseCase.listShares(any()) } returns Result.success(listOf("docs", "media"))
+        val viewModel = buildViewModel(
+            discovery = FakeDiscovery(flowOf(emptyList())),
+            connectUseCase = connectUseCase
+        )
+        viewModel.handleIntent(ConnectionIntent.EditConfig(baseConfig()))
+
+        viewModel.handleIntent(ConnectionIntent.FetchShares)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.isFetchingShares)
+        assertEquals(listOf("docs", "media"), viewModel.state.value.availableShares)
+        assertTrue(viewModel.state.value.hasFetchedShares)
+        assertNull(viewModel.state.value.shareFetchError)
+        assertNull(viewModel.state.value.error)
+
+        viewModel.handleIntent(ConnectionIntent.SelectShare("media"))
+
+        assertEquals("media", viewModel.state.value.formShareName)
+    }
+
+    @Test
+    fun `FetchShares 空列表只展示共享区域空状态且不触发全局错误`() = runTest(dispatcher) {
+        val connectUseCase = mockk<ConnectSMBUseCase>(relaxed = true)
+        coEvery { connectUseCase.listShares(any()) } returns Result.success(emptyList())
+        val viewModel = buildViewModel(
+            discovery = FakeDiscovery(flowOf(emptyList())),
+            connectUseCase = connectUseCase
+        )
+        viewModel.handleIntent(ConnectionIntent.EditConfig(baseConfig(shareName = "manual")))
+
+        viewModel.handleIntent(ConnectionIntent.FetchShares)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.isFetchingShares)
+        assertTrue(viewModel.state.value.hasFetchedShares)
+        assertTrue(viewModel.state.value.availableShares.isEmpty())
+        assertNull(viewModel.state.value.shareFetchError)
+        assertNull(viewModel.state.value.error)
+        assertEquals("manual", viewModel.state.value.formShareName)
+    }
+
+    @Test
+    fun `FetchShares 失败时停止加载保留表单并隔离为共享区域错误`() = runTest(dispatcher) {
+        val connectUseCase = mockk<ConnectSMBUseCase>(relaxed = true)
+        coEvery { connectUseCase.listShares(any()) } returns Result.failure(IOException("EOF while reading packet"))
+        val viewModel = buildViewModel(
+            discovery = FakeDiscovery(flowOf(emptyList())),
+            connectUseCase = connectUseCase
+        )
+        viewModel.handleIntent(
+            ConnectionIntent.EditConfig(
+                baseConfig(
+                    serverAddress = "nas.local",
+                    port = 1445,
+                    shareName = "manual",
+                    username = "alice",
+                    password = "secret"
+                )
+            )
+        )
+
+        viewModel.handleIntent(ConnectionIntent.FetchShares)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.isFetchingShares)
+        assertTrue(viewModel.state.value.hasFetchedShares)
+        assertTrue(viewModel.state.value.availableShares.isEmpty())
+        assertTrue(viewModel.state.value.shareFetchError!!.isNotBlank())
+        assertNull(viewModel.state.value.error)
+        assertEquals("nas.local", viewModel.state.value.formServerAddress)
+        assertEquals("1445", viewModel.state.value.formPort)
+        assertEquals("manual", viewModel.state.value.formShareName)
+        assertEquals("alice", viewModel.state.value.formUsername)
+        assertEquals("secret", viewModel.state.value.formPassword)
+    }
+
+    @Test
+    fun `UpdateFormField 修改连接参数时清空旧共享列表状态`() = runTest(dispatcher) {
+        val connectUseCase = mockk<ConnectSMBUseCase>(relaxed = true)
+        coEvery { connectUseCase.listShares(any()) } returns Result.success(listOf("docs"))
+        val viewModel = buildViewModel(
+            discovery = FakeDiscovery(flowOf(emptyList())),
+            connectUseCase = connectUseCase
+        )
+        viewModel.handleIntent(ConnectionIntent.EditConfig(baseConfig(shareName = "manual")))
+        viewModel.handleIntent(ConnectionIntent.FetchShares)
+        advanceUntilIdle()
+
+        viewModel.handleIntent(ConnectionIntent.UpdateFormField(FormField.SERVER_ADDRESS, "nas-new.local"))
+
+        assertFalse(viewModel.state.value.isFetchingShares)
+        assertFalse(viewModel.state.value.hasFetchedShares)
+        assertTrue(viewModel.state.value.availableShares.isEmpty())
+        assertNull(viewModel.state.value.shareFetchError)
+        assertEquals("manual", viewModel.state.value.formShareName)
+    }
+
+    @Test
+    fun `FetchShares 表单变更后的过期结果不会写入状态`() = runTest(dispatcher) {
+        val pendingResult = CompletableDeferred<Result<List<String>>>()
+        val connectUseCase = mockk<ConnectSMBUseCase>(relaxed = true)
+        coEvery { connectUseCase.listShares(any()) } coAnswers { pendingResult.await() }
+        val viewModel = buildViewModel(
+            discovery = FakeDiscovery(flowOf(emptyList())),
+            connectUseCase = connectUseCase
+        )
+        viewModel.handleIntent(ConnectionIntent.EditConfig(baseConfig()))
+
+        viewModel.handleIntent(ConnectionIntent.FetchShares)
+        runCurrent()
+        assertTrue(viewModel.state.value.isFetchingShares)
+
+        viewModel.handleIntent(ConnectionIntent.UpdateFormField(FormField.SERVER_ADDRESS, "nas-new.local"))
+        runCurrent()
+        assertFalse(viewModel.state.value.isFetchingShares)
+
+        pendingResult.complete(Result.success(listOf("old-share")))
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.hasFetchedShares)
+        assertTrue(viewModel.state.value.availableShares.isEmpty())
+        assertNull(viewModel.state.value.shareFetchError)
+        assertEquals("nas-new.local", viewModel.state.value.formServerAddress)
+    }
+
     private fun buildViewModel(
         discovery: SmbHostDiscovery,
-        connectionRepository: ConnectionRepository = buildConnectionRepository()
+        connectionRepository: ConnectionRepository = buildConnectionRepository(),
+        connectUseCase: ConnectSMBUseCase = ConnectSMBUseCase(SMBConnectionManager())
     ): ConnectionViewModel {
-        val connectionManager = SMBConnectionManager()
         return ConnectionViewModel(
             application = application,
             smbHostDiscovery = discovery,
             ioDispatcher = dispatcher,
             connectionRepository = connectionRepository,
-            connectUseCase = ConnectSMBUseCase(connectionManager),
+            connectUseCase = connectUseCase,
             saveConnectionUseCase = SaveConnectionUseCase(connectionRepository),
             deleteConnectionUseCase = DeleteConnectionUseCase(connectionRepository)
+        )
+    }
+
+    private fun baseConfig(
+        serverAddress: String = "192.168.1.20",
+        port: Int = 445,
+        shareName: String = "",
+        username: String = "user",
+        password: String = "pass"
+    ): SMBConfig {
+        return SMBConfig(
+            serverAddress = serverAddress,
+            port = port,
+            shareName = shareName,
+            username = username,
+            password = password
         )
     }
 

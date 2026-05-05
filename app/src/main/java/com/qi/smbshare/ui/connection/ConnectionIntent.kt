@@ -26,6 +26,8 @@ sealed class ConnectionIntent {
     object NavigateToNewConnection : ConnectionIntent() // 导航到新建连接页面
     object ClearRestoredLastAccess : ConnectionIntent() // 清除最后访问恢复状态
     object ClearNavigation : ConnectionIntent() // 清除导航状态
+    object FetchShares : ConnectionIntent() // 从服务器获取共享列表
+    data class SelectShare(val shareName: String) : ConnectionIntent() // 用户选择共享
 }
 
 enum class FormField {

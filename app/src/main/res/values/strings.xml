@@ -18,6 +18,10 @@
     <string name="label_server_address">Server Address *</string>
     <string name="label_port">Port</string>
     <string name="label_share_name">Share Name *</string>
+    <string name="section_share_name">Share</string>
+    <string name="btn_fetch_shares">Get Shares</string>
+    <string name="shares_empty_hint">No shares found on server. You can still type one manually.</string>
+    <string name="share_item_select">Select</string>
     <string name="label_username">Username</string>
     <string name="label_password">Password</string>
     <string name="btn_test_connection">Test Connection</string>
@@ -228,6 +232,7 @@
     <string name="error_connect_failed">Unable to connect. Please try again later.</string>
     <string name="error_reconnect_failed">Unable to reconnect. Please try again later.</string>
     <string name="error_connection_test_failed">Connection test failed. Please try again later.</string>
+    <string name="error_fetch_shares_failed">Unable to get the share list. You can still enter the share name manually.</string>
     <string name="error_discovery_failed">SMB host scan failed. You can still enter the address manually.</string>
     <string name="error_discovery_target_invalid">Invalid target. Enter an IPv4 address or /24-/32 CIDR, such as 192.168.1.55 or 192.168.1.0/24.</string>
     <string name="error_load_file_list_failed">Unable to load the file list. Please try again later.</string>

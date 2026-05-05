@@ -54,6 +54,25 @@ class ConnectSMBUseCase @Inject constructor(
         }
     }
 
+    suspend fun listShares(config: SMBConfig): Result<List<String>> {
+        Log.d(TAG, "UseCase: 开始获取共享列表，服务器: ${config.serverAddress}:${config.port}")
+        return try {
+            val shares = withContext(Dispatchers.IO) {
+                connectionManager.listShares(config)
+            }
+            Log.d(TAG, "UseCase: 获取共享列表成功，数量=${shares.size}")
+            Result.success(shares)
+        } catch (e: IOException) {
+            Log.e(TAG, "UseCase: 获取共享列表 IO 异常", e)
+            Result.failure(e)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "UseCase: 获取共享列表异常", e)
+            Result.failure(IOException("获取共享列表失败: ${e.message}", e))
+        }
+    }
+
     fun disconnect() {
         connectionManager.disconnect()
     }

@@ -17,6 +17,10 @@ data class ConnectionState(
     val discoveryError: String? = null,
     val error: String? = null,
     val testResult: String? = null,
+    val availableShares: List<String> = emptyList(),
+    val isFetchingShares: Boolean = false,
+    val hasFetchedShares: Boolean = false,
+    val shareFetchError: String? = null,
     val restoredLastAccess: RestoredLastAccess? = null,
     val navigateToFileList: SMBConfig? = null, // 导航到文件列表
     val navigateToEdit: SMBConfig? = null // 导航到编辑页面（null表示新建）
