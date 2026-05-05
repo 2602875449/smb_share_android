@@ -1,7 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "Check translated spec index for Chinese readability and preserved scope"}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check translated directory conventions against existing Android code examples"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Check translated persistence conventions against existing Room/DataStore examples"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check translated error handling conventions against existing examples"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check translated logging conventions against existing examples"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check translated quality/testing conventions and no unsupported new rules"}
-{"file": ".trellis/tasks/00-bootstrap-guidelines/research/codebase-patterns.md", "reason": "Source-of-truth for existing supported patterns"}

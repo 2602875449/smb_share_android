@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "Android 数据/领域/服务层规范入口和编码前检查清单"}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "保持现有 Android 模块边界和包职责，避免 DI 接入时扩大架构重构"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Room/DataStore/持久化相关约定，Hilt module 需要提供数据库、DAO、DataStoreManager"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "ViewModel、Compose 状态、测试与验证命令规范"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "服务和工厂迁移时保留日志边界，避免敏感信息泄露"}
-{"file": ".trellis/tasks/05-01-hilt-dependency-injection/research/hilt-official-setup.md", "reason": "官方 Hilt/KSP/Compose/ViewModel/Service/Assisted Injection 配置研究"}

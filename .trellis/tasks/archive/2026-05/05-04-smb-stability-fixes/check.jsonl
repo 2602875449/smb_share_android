@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "后续检查时读取 backend 规范索引和质量边界"}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "检查 SMB data/domain/service 层边界是否符合项目规范"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查错误分类、重试和 UI 错误展示是否符合规范"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 Kotlin、Compose、测试和验证命令是否符合项目规范"}

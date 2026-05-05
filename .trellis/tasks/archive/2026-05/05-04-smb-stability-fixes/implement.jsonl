@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "后续实现前读取 backend 规范索引和开发前检查清单"}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "SMB data/domain/service 层修改需遵守现有目录和层边界"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "连接、文件操作和重试需要遵守应用错误分类与 Result 传递规范"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Compose、Kotlin、测试和验证命令需遵守项目质量规范"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "连接和安全相关修改需要遵守日志与敏感数据边界"}
-{"file": ".trellis/tasks/05-04-smb-stability-fixes/research/smbj-share-enumeration.md", "reason": "共享枚举需求需要先参考 SMBJ 0.14.0 本地能力核对"}

@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "本次审查和可能修复覆盖 Android 数据层、服务层、UI 状态和测试，需要遵守项目规范索引。"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "diff 涉及错误映射、Result 传递、删除和传输失败处理。"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "diff 涉及 Kotlin、Compose 状态和测试验证。"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "diff 涉及 SMB 连接和传输日志。"}

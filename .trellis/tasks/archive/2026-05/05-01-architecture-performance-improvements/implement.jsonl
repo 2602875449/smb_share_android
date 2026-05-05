@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "架构与性能改进需要遵守 Android 应用业务层规范索引。"}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "涉及 MainActivity 拆分、导航包和组件包位置。"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "涉及 Room DAO 局部更新和 TransferRepository 持久化逻辑。"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "涉及 TransferService 错误转换、重试和 Result 语义保持。"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "涉及服务、SMB 连接和异常日志边界。"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "涉及 Kotlin、Compose、主题颜色、测试与验证命令。"}

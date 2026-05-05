@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "检查整体规范覆盖范围"}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "检查新增组件放置和层边界是否正确"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查 Room Migration、schema 导出和数据库测试是否达标"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查错误类型和 UI 处理是否摆脱字符串文案判断"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 Compose 状态、测试、lint 和主题/本地化约束"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查日志级别、tag 和敏感信息边界"}
