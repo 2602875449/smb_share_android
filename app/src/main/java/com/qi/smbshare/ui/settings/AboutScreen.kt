@@ -47,10 +47,10 @@ import com.qi.smbshare.R
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(
+    modifier: Modifier = Modifier,
     onBack: () -> Unit,
     onNavigateToPrivacyPolicy: () -> Unit,
     onNavigateToLicenses: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val packageInfo = try {

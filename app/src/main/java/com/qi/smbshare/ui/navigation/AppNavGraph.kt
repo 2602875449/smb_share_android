@@ -67,12 +67,7 @@ fun AppNavGraph(
     val currentRoute = navBackStackEntry?.destination?.route
     val selectedTab = AppDestination.selectedTabFor(currentRoute)
 
-    val currentLocale = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-        configuration.locales[0]
-    } else {
-        @Suppress("DEPRECATION")
-        configuration.locale
-    }
+    val currentLocale = configuration.locales[0]
     val isChinese = currentLocale.language == "zh"
 
     val appNavigationState by appNavigationViewModel.state.collectAsStateWithLifecycle()
@@ -98,17 +93,22 @@ fun AppNavGraph(
         }
     }
 
-    val useFileListImmersiveBars = currentRoute == AppDestination.FileList.route &&
-        currentConfig != null
+    val useFileListImmersiveBars =
+        currentRoute == AppDestination.FileList.route && currentConfig != null
 
     Scaffold(
         contentWindowInsets = if (useFileListImmersiveBars) {
             WindowInsets(0.dp)
         } else {
             ScaffoldDefaults.contentWindowInsets
-        },
-        bottomBar = {
-            if (!isFilePreviewVisible) {
+        }, bottomBar = {
+            val topLevelRoutes = setOf(
+                AppDestination.Connection.route,
+                AppDestination.FileList.route,
+                AppDestination.TransferManager.route,
+                AppDestination.Settings.route,
+            )
+            if (currentRoute in topLevelRoutes && !isFilePreviewVisible) {
                 AppBottomNavigationBar(
                     selectedTab = selectedTab,
                     activeTransferCount = activeTransferCount,
@@ -120,27 +120,27 @@ fun AppNavGraph(
                             NavigationTab.CONNECTION -> {
                                 navController.navigateTopLevel(AppDestination.Connection.route)
                             }
+
                             NavigationTab.FILE -> {
                                 if (currentConfig != null) {
                                     navController.navigateTopLevel(AppDestination.FileList.route)
                                 }
                             }
+
                             NavigationTab.TRANSFER_MANAGER -> {
                                 navController.navigateTopLevel(AppDestination.TransferManager.route)
                             }
+
                             NavigationTab.SETTINGS -> {
                                 navController.navigateTopLevel(AppDestination.Settings.route)
                             }
                         }
-                    }
-                )
+                    })
             }
-        }
-    ) { padding ->
+        }) { padding ->
         Box(modifier = Modifier.padding(padding)) {
             NavHost(
-                navController = navController,
-                startDestination = AppDestination.Connection.route
+                navController = navController, startDestination = AppDestination.Connection.route
             ) {
                 composable(AppDestination.Connection.route) {
                     ConnectionScreen(
@@ -157,8 +157,7 @@ fun AppNavGraph(
                         },
                         onExit = {
                             activity?.finish()
-                        }
-                    )
+                        })
                 }
                 composable(AppDestination.EditConnection.route) {
                     EditConnectionScreen(
@@ -176,8 +175,7 @@ fun AppNavGraph(
                             appNavigationViewModel.clearEditing()
                             appNavigationViewModel.showFiles(config)
                             navController.navigateTopLevel(AppDestination.FileList.route)
-                        }
-                    )
+                        })
                 }
                 composable(AppDestination.FileList.route) {
                     val config = currentConfig
@@ -207,20 +205,17 @@ fun AppNavGraph(
                             },
                             onPreviewVisibilityChange = { visible ->
                                 appNavigationViewModel.setPreviewVisible(visible)
-                            }
-                        )
+                            })
                     } else {
                         MissingConnectionContent(
                             onGoToConnection = {
                                 navController.navigateTopLevel(AppDestination.Connection.route)
-                            }
-                        )
+                            })
                     }
                 }
                 composable(AppDestination.TransferManager.route) {
                     TransferManagerScreen(
-                        viewModel = transferManagerViewModel,
-                        onInstallApk = onInstallApk
+                        viewModel = transferManagerViewModel, onInstallApk = onInstallApk
                     )
                 }
                 composable(AppDestination.Settings.route) {
@@ -228,20 +223,15 @@ fun AppNavGraph(
                         appNavigationViewModel.setPreviewVisible(false)
                         navController.navigateTopLevel(AppDestination.Connection.route)
                     }
-                    SettingsScreen(
-                        viewModel = settingsViewModel,
-                        onNavigateToPrivacyPolicy = {
-                            navController.navigate(AppDestination.PrivacyPolicy.route)
-                        },
-                        onNavigateToAbout = {
-                            navController.navigate(AppDestination.About.route)
-                        }
-                    )
+                    SettingsScreen(viewModel = settingsViewModel, onNavigateToPrivacyPolicy = {
+                        navController.navigate(AppDestination.PrivacyPolicy.route)
+                    }, onNavigateToAbout = {
+                        navController.navigate(AppDestination.About.route)
+                    })
                 }
                 composable(AppDestination.PrivacyPolicy.route) {
                     PredictiveBackAnimatedContent(
-                        onBack = { navController.popBackStack() }
-                    ) { predictiveBackModifier ->
+                        onBack = { navController.popBackStack() }) { predictiveBackModifier ->
                         PrivacyPolicyScreen(
                             onBack = { navController.popBackStack() },
                             modifier = predictiveBackModifier
@@ -250,8 +240,7 @@ fun AppNavGraph(
                 }
                 composable(AppDestination.About.route) {
                     PredictiveBackAnimatedContent(
-                        onBack = { navController.popBackStack() }
-                    ) { predictiveBackModifier ->
+                        onBack = { navController.popBackStack() }) { predictiveBackModifier ->
                         AboutScreen(
                             onBack = { navController.popBackStack() },
                             onNavigateToPrivacyPolicy = {
@@ -271,8 +260,7 @@ fun AppNavGraph(
 @Composable
 private fun MissingConnectionContent(onGoToConnection: () -> Unit) {
     Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
