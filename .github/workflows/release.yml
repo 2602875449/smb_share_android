@@ -1,0 +1,54 @@
+name: Build & Release
+
+# 推送 v* 格式的 tag 时触发（如 v1.0.0）
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 配置 Gradle 缓存
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 还原签名 Keystore
+        run: |
+          mkdir -p app/keystore
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/keystore/smb_share.jks
+
+      - name: 构建 Release APK
+        env:
+          SMB_SHARE_RELEASE_STORE_FILE: ${{ github.workspace }}/app/keystore/smb_share.jks
+          SMB_SHARE_RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          SMB_SHARE_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          SMB_SHARE_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: 构建 Release AAB（Google Play 用）
+        env:
+          SMB_SHARE_RELEASE_STORE_FILE: ${{ github.workspace }}/app/keystore/smb_share.jks
+          SMB_SHARE_RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          SMB_SHARE_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          SMB_SHARE_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease
+
+      - name: 发布到 GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          # 自动生成 Release Notes（基于 commit 信息）
+          generate_release_notes: true
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
