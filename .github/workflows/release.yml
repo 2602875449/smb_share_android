@@ -28,21 +28,16 @@ jobs:
           mkdir -p app/keystore
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/keystore/smb_share.jks
 
-      - name: 构建 Release APK
-        env:
-          SMB_SHARE_RELEASE_STORE_FILE: ${{ github.workspace }}/app/keystore/smb_share.jks
-          SMB_SHARE_RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          SMB_SHARE_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          SMB_SHARE_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
+      - name: 从 tag 提取版本号
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
-      - name: 构建 Release AAB（Google Play 用）
+      - name: 构建 Release APK 和 AAB
         env:
           SMB_SHARE_RELEASE_STORE_FILE: ${{ github.workspace }}/app/keystore/smb_share.jks
           SMB_SHARE_RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           SMB_SHARE_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           SMB_SHARE_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew bundleRelease
+        run: ./gradlew assembleRelease bundleRelease -PversionName=${{ env.VERSION }}
 
       - name: 发布到 GitHub Releases
         uses: softprops/action-gh-release@v2
