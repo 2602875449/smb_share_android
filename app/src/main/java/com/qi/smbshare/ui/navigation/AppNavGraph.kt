@@ -2,6 +2,10 @@ package com.qi.smbshare.ui.navigation
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,7 +20,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,7 +38,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.qi.smbshare.R
 import com.qi.smbshare.data.model.SMBConfig
-import com.qi.smbshare.ui.components.PredictiveBackAnimatedContent
 import com.qi.smbshare.ui.connection.ConnectionIntent
 import com.qi.smbshare.ui.connection.ConnectionScreen
 import com.qi.smbshare.ui.connection.ConnectionViewModel
@@ -93,15 +95,8 @@ fun AppNavGraph(
         }
     }
 
-    val useFileListImmersiveBars =
-        currentRoute == AppDestination.FileList.route && currentConfig != null
-
     Scaffold(
-        contentWindowInsets = if (useFileListImmersiveBars) {
-            WindowInsets(0.dp)
-        } else {
-            ScaffoldDefaults.contentWindowInsets
-        }, bottomBar = {
+        contentWindowInsets = WindowInsets(0.dp), bottomBar = {
             val topLevelRoutes = setOf(
                 AppDestination.Connection.route,
                 AppDestination.FileList.route,
@@ -159,7 +154,13 @@ fun AppNavGraph(
                             activity?.finish()
                         })
                 }
-                composable(AppDestination.EditConnection.route) {
+                composable(
+                    AppDestination.EditConnection.route,
+                    enterTransition = { slideInHorizontally { it } },
+                    exitTransition = { slideOutHorizontally { it } },
+                    popEnterTransition = { slideInHorizontally { -it / 4 } + fadeIn() },
+                    popExitTransition = { slideOutHorizontally { it } }
+                ) {
                     EditConnectionScreen(
                         viewModel = connectionViewModel,
                         configToEdit = editConfig,
@@ -229,28 +230,32 @@ fun AppNavGraph(
                         navController.navigate(AppDestination.About.route)
                     })
                 }
-                composable(AppDestination.PrivacyPolicy.route) {
-                    PredictiveBackAnimatedContent(
-                        onBack = { navController.popBackStack() }) { predictiveBackModifier ->
-                        PrivacyPolicyScreen(
-                            onBack = { navController.popBackStack() },
-                            modifier = predictiveBackModifier
-                        )
-                    }
+                composable(
+                    AppDestination.PrivacyPolicy.route,
+                    enterTransition = { slideInHorizontally { it } },
+                    exitTransition = { slideOutHorizontally { it } },
+                    popEnterTransition = { slideInHorizontally { -it / 4 } + fadeIn() },
+                    popExitTransition = { slideOutHorizontally { it } }
+                ) {
+                    PrivacyPolicyScreen(
+                        onBack = { navController.popBackStack() }
+                    )
                 }
-                composable(AppDestination.About.route) {
-                    PredictiveBackAnimatedContent(
-                        onBack = { navController.popBackStack() }) { predictiveBackModifier ->
-                        AboutScreen(
-                            onBack = { navController.popBackStack() },
-                            onNavigateToPrivacyPolicy = {
-                                navController.navigate(AppDestination.PrivacyPolicy.route) {
-                                    popUpTo(AppDestination.Settings.route)
-                                }
-                            },
-                            modifier = predictiveBackModifier
-                        )
-                    }
+                composable(
+                    AppDestination.About.route,
+                    enterTransition = { slideInHorizontally { it } },
+                    exitTransition = { slideOutHorizontally { it } },
+                    popEnterTransition = { slideInHorizontally { -it / 4 } + fadeIn() },
+                    popExitTransition = { slideOutHorizontally { it } }
+                ) {
+                    AboutScreen(
+                        onBack = { navController.popBackStack() },
+                        onNavigateToPrivacyPolicy = {
+                            navController.navigate(AppDestination.PrivacyPolicy.route) {
+                                popUpTo(AppDestination.Settings.route)
+                            }
+                        }
+                    )
                 }
             }
         }

@@ -6,11 +6,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,23 +31,15 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,9 +51,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -84,7 +80,6 @@ import java.io.File
  * @param viewModel 传输管理 ViewModel
  * @param onInstallApk APK 安装回调
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransferManagerScreen(
     viewModel: TransferManagerViewModel,
@@ -291,83 +286,53 @@ fun TransferManagerScreen(
     }
     
     Scaffold(
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            Surface(
-                color = Color.Transparent,
-                tonalElevation = 4.dp
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
-                        .padding(horizontal = 16.dp),
+                        .statusBarsPadding()
+                        .height(52.dp)
+                        .padding(end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // 导航图标（多选模式下显示关闭按钮）
                     if (state.isMultiSelectMode) {
-                        IconButton(
-                            onClick = {
-                                viewModel.handleIntent(TransferManagerIntent.ExitMultiSelectMode)
-                            }
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = stringResource(R.string.transfer_cd_exit_multi_select),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
+                        IconButton(onClick = { viewModel.handleIntent(TransferManagerIntent.ExitMultiSelectMode) }) {
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.transfer_cd_exit_multi_select))
                         }
+                    } else {
+                        Box(modifier = Modifier.size(16.dp))
                     }
-                    
-                    // 标题
                     Text(
                         text = if (state.isMultiSelectMode) {
-                            stringResource(
-                                R.string.transfer_app_bar_selected,
-                                state.selectedTaskCount
-                            )
+                            stringResource(R.string.transfer_app_bar_selected, state.selectedTaskCount)
                         } else {
                             stringResource(R.string.transfer_app_bar_title)
                         },
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).padding(start = if (state.isMultiSelectMode) 0.dp else 12.dp)
                     )
-                    
-                    // 操作按钮
                     if (state.isMultiSelectMode) {
-                        // 多选模式下的操作按钮
-                        IconButton(
-                            onClick = {
-                                viewModel.handleIntent(TransferManagerIntent.SelectAllTasks)
-                            }
-                        ) {
-                            Icon(
-                                Icons.Default.CheckCircle,
-                                contentDescription = stringResource(R.string.transfer_cd_select_all),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
+                        IconButton(onClick = { viewModel.handleIntent(TransferManagerIntent.SelectAllTasks) }) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = stringResource(R.string.transfer_cd_select_all))
                         }
                     } else {
-                        // 正常模式下的操作按钮
-                        IconButton(
-                            onClick = {
-                                viewModel.handleIntent(TransferManagerIntent.RefreshTasks)
-                            }
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = stringResource(R.string.transfer_cd_refresh),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
+                        IconButton(onClick = { viewModel.handleIntent(TransferManagerIntent.RefreshTasks) }) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.transfer_cd_refresh))
                         }
                     }
                 }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.5.dp)
             }
         },
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
-        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         floatingActionButton = {
             // 多选模式下显示批量操作按钮
             if (state.isMultiSelectMode && state.hasSelectedTasks) {
@@ -426,67 +391,74 @@ fun TransferManagerScreen(
             )
         }
         
+        // 自定义紧凑 Tab 栏（下划线指示器，无 M3 pill 动画）
         val selectedTabIndex = state.selectedTab.ordinal
-        // Tab 导航栏（可滑动）
-            ScrollableTabRow(
-                selectedTabIndex = selectedTabIndex,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary,
-                edgePadding = 0.dp,
-                indicator = { tabPositions ->
-                    TabRowDefaults.Indicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                },
-                divider = {} // 去掉默认底部分割线，避免出现额外细线
-            ) {
-                Tab(
-                    selected = state.selectedTab == TransferTab.DOWNLOADING,
-                    onClick = {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(TransferTab.DOWNLOADING.ordinal)
+        val tabs = listOf(
+            Triple(stringResource(R.string.transfer_tab_downloading), state.downloadingTasks.size, TransferTab.DOWNLOADING),
+            Triple(stringResource(R.string.transfer_tab_uploading), state.uploadingTasks.size, TransferTab.UPLOADING),
+            Triple(stringResource(R.string.transfer_tab_completed), state.completedTasks.size, TransferTab.COMPLETED)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .height(40.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            tabs.forEachIndexed { index, (label, count, tab) ->
+                val isSelected = selectedTabIndex == index
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        ) {
+                            coroutineScope.launch { pagerState.animateScrollToPage(index) }
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal
+                        )
+                        if (count > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                        shape = MaterialTheme.shapes.extraSmall
+                                    )
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = count.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.surface
+                                )
+                            }
                         }
-                    },
-                    text = {
-                        TabLabelWithBadge(
-                            label = stringResource(R.string.transfer_tab_downloading),
-                            count = state.downloadingTasks.size
+                    }
+                    if (isSelected) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .size(width = 24.dp, height = 2.dp)
+                                .background(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.extraSmall)
                         )
                     }
-                )
-                
-                Tab(
-                    selected = state.selectedTab == TransferTab.UPLOADING,
-                    onClick = {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(TransferTab.UPLOADING.ordinal)
-                        }
-                    },
-                    text = {
-                        TabLabelWithBadge(
-                            label = stringResource(R.string.transfer_tab_uploading),
-                            count = state.uploadingTasks.size
-                        )
-                    }
-                )
-                
-                Tab(
-                    selected = state.selectedTab == TransferTab.COMPLETED,
-                    onClick = {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(TransferTab.COMPLETED.ordinal)
-                        }
-                    },
-                    text = {
-                        TabLabelWithBadge(
-                            label = stringResource(R.string.transfer_tab_completed),
-                            count = state.completedTasks.size,
-                            showBadge = false
-                        )
-                    }
-                )
+                }
             }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), thickness = 0.5.dp)
             
             // 任务列表内容区域（支持左右滑动切换）
             HorizontalPager(
@@ -675,65 +647,30 @@ private fun NotificationPermissionBanner(
     } else {
         stringResource(R.string.transfer_notification_banner_action_allow)
     }
-    val onAction = if (status == PermissionManager.PermissionStatus.PERMANENTLY_DENIED) {
-        onOpenSettings
-    } else {
-        onRequestPermission
-    }
-    
-    Card(
+    val onAction = if (status == PermissionManager.PermissionStatus.PERMANENTLY_DENIED) onOpenSettings else onRequestPermission
+
+    Row(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-        )
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = stringResource(R.string.transfer_notification_banner_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f)
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            TextButton(
-                onClick = onAction,
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text(actionText)
-            }
         }
-    }
-}
-
-/**
- * 空状态显示组件
- * 根据不同的 Tab 显示不同的空状态提示
- */
-@Composable
-private fun TabLabelWithBadge(
-    label: String,
-    count: Int,
-    showBadge: Boolean = true
-) {
-    // 角标与文字横向排列，避免遮挡
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label)
-        if (showBadge && count > 0) {
-            Badge {
-                Text(count.toString())
-            }
+        TextButton(onClick = onAction) {
+            Text(actionText, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -746,7 +683,7 @@ private fun EmptyState(tab: TransferTab) {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
                 imageVector = when (tab) {
@@ -755,17 +692,16 @@ private fun EmptyState(tab: TransferTab) {
                     TransferTab.COMPLETED -> Icons.Default.CheckCircle
                 },
                 contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                modifier = Modifier.size(36.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
             )
-            
             Text(
                 text = when (tab) {
                     TransferTab.DOWNLOADING -> stringResource(R.string.transfer_empty_downloading)
                     TransferTab.UPLOADING -> stringResource(R.string.transfer_empty_uploading)
                     TransferTab.COMPLETED -> stringResource(R.string.transfer_empty_completed)
                 },
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )

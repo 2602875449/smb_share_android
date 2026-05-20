@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -40,7 +41,8 @@ fun BadgedIcon(
     icon: ImageVector,
     badgeCount: Int,
     hasActiveTransfers: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tint: Color = Color.Unspecified
 ) {
     Box(modifier = modifier) {
         val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -58,6 +60,7 @@ fun BadgedIcon(
         Icon(
             imageVector = icon,
             contentDescription = stringResource(R.string.nav_transfer_manager),
+            tint = if (tint == Color.Unspecified) MaterialTheme.colorScheme.onSurfaceVariant else tint,
             modifier = Modifier.graphicsLayer {
                 scaleX = scale
                 scaleY = scale

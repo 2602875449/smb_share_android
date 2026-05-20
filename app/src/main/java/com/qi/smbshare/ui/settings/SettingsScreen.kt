@@ -1,36 +1,64 @@
 package com.qi.smbshare.ui.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Policy
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.qi.smbshare.R
 import com.qi.smbshare.data.model.ThemeMode
 import com.qi.smbshare.util.AppLanguage
 import com.qi.smbshare.util.LanguageHelper
-import com.qi.smbshare.R
-import androidx.compose.ui.res.stringResource
 
 /**
- * 设置页面
- * 
- * @param viewModel 设置页面的 ViewModel
- * @param onNavigateToPrivacyPolicy 导航到隐私政策页面
- * @param onNavigateToAbout 导航到关于页面
- * @param onNavigateToOnboarding 导航到引导页面（未来实现）
+ * 设置页面 - iOS 分组列表风格
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
@@ -39,7 +67,6 @@ fun SettingsScreen(
     onNavigateToOnboarding: (() -> Unit)? = null
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var showThemeDialog by remember { mutableStateOf(false) }
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
     val activity = context as? androidx.activity.ComponentActivity
@@ -52,475 +79,278 @@ fun SettingsScreen(
         stringResource(R.string.settings_download_path_checking)
     }
 
-    // 设置页的即时操作结果统一使用 Snackbar，和其他业务提示保持一致
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let { message ->
             snackbarHostState.showSnackbar(message)
             snackbarMessage = null
         }
     }
-    
+
     Scaffold(
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
-        },
-        topBar = {
-            Surface(
-                color = Color.Transparent,
-                tonalElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.action_settings),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
+        contentWindowInsets = WindowInsets(0.dp),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            contentPadding = PaddingValues(vertical = 8.dp)
+                .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
         ) {
-            // 通用设置区域
-            item {
-                SettingsSectionHeader(title = stringResource(R.string.settings_section_general))
-            }
-            
-            item {
-                SettingsItem(
-                    icon = Icons.Default.Palette,
-                    title = stringResource(R.string.settings_theme_title),
-                    subtitle = when (state.themeMode) {
-                        ThemeMode.SYSTEM -> stringResource(R.string.settings_theme_follow_system)
-                        ThemeMode.LIGHT -> stringResource(R.string.settings_theme_light)
-                        ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
-                    },
-                    onClick = { showThemeDialog = true }
+            // 工具栏
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .statusBarsPadding()
+                    .height(52.dp)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.action_settings),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            
-            item {
-                SettingsItem(
-                    icon = Icons.Default.Language,
-                    title = stringResource(R.string.settings_language),
-                    subtitle = when (state.currentLanguage) {
-                        AppLanguage.SYSTEM -> stringResource(R.string.language_follow_system)
-                        AppLanguage.ENGLISH -> stringResource(R.string.language_english)
-                        AppLanguage.CHINESE -> stringResource(R.string.language_chinese)
-                    },
-                    onClick = { viewModel.showLanguageDialog() }
-                )
-            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.5.dp)
 
-            item {
-                SettingsItem(
-                    icon = Icons.Default.Folder,
-                    title = stringResource(R.string.settings_download_location_title),
-                    subtitle = downloadPathText,
-                    onClick = {
-                        if (state.downloadDirectory.isNotBlank()) {
-                            clipboardManager.setText(AnnotatedString(state.downloadDirectory))
-                            snackbarMessage = downloadPathCopiedMessage
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                // ── 通用 ──
+                item { SettingsSectionHeader(stringResource(R.string.settings_section_general)) }
+                item {
+                    SettingsGroup {
+                        // 主题内联选择（不用 Dialog）
+                        SettingsGroupHeader(stringResource(R.string.settings_theme_title), Icons.Default.Palette)
+                        listOf(
+                            ThemeMode.SYSTEM to stringResource(R.string.settings_theme_follow_system),
+                            ThemeMode.LIGHT to stringResource(R.string.settings_theme_light),
+                            ThemeMode.DARK to stringResource(R.string.settings_theme_dark)
+                        ).forEachIndexed { i, (mode, label) ->
+                            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f), thickness = 0.5.dp, modifier = Modifier.padding(start = 40.dp))
+                            ThemeRadioRow(
+                                label = label,
+                                selected = state.themeMode == mode,
+                                onClick = { viewModel.setThemeMode(mode) }
+                            )
                         }
                     }
-                )
-            }
-            
-            // 帮助与支持区域
-            item {
-                SettingsSectionHeader(title = stringResource(R.string.settings_section_support))
-            }
-            
-            // 查看引导教程（如果提供了回调）
-            if (onNavigateToOnboarding != null) {
+                }
+                item { Spacer(modifier = Modifier.height(8.dp)) }
                 item {
-                    SettingsItem(
-                        icon = Icons.AutoMirrored.Filled.Help,
-                        title = stringResource(R.string.settings_onboarding_title),
-                        subtitle = stringResource(R.string.settings_onboarding_subtitle),
-                        onClick = onNavigateToOnboarding
-                    )
+                    SettingsGroup {
+                        SettingsItem(
+                            icon = Icons.Default.Language,
+                            title = stringResource(R.string.settings_language),
+                            subtitle = when (state.currentLanguage) {
+                                AppLanguage.SYSTEM -> stringResource(R.string.language_follow_system)
+                                AppLanguage.ENGLISH -> stringResource(R.string.language_english)
+                                AppLanguage.CHINESE -> stringResource(R.string.language_chinese)
+                            },
+                            onClick = { viewModel.showLanguageDialog() }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f), thickness = 0.5.dp, modifier = Modifier.padding(start = 40.dp))
+                        SettingsItem(
+                            icon = Icons.Default.Folder,
+                            title = stringResource(R.string.settings_download_location_title),
+                            subtitle = downloadPathText,
+                            showChevron = false,
+                            onClick = {
+                                if (state.downloadDirectory.isNotBlank()) {
+                                    clipboardManager.setText(AnnotatedString(state.downloadDirectory))
+                                    snackbarMessage = downloadPathCopiedMessage
+                                }
+                            }
+                        )
+                    }
+                }
+
+                // ── 帮助与支持 ──
+                item { SettingsSectionHeader(stringResource(R.string.settings_section_support)) }
+                item {
+                    SettingsGroup {
+                        var firstItem = true
+                        if (onNavigateToOnboarding != null) {
+                            SettingsItem(
+                                icon = Icons.AutoMirrored.Filled.Help,
+                                title = stringResource(R.string.settings_onboarding_title),
+                                subtitle = stringResource(R.string.settings_onboarding_subtitle),
+                                onClick = onNavigateToOnboarding
+                            )
+                            firstItem = false
+                        }
+                        if (!firstItem) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f), thickness = 0.5.dp, modifier = Modifier.padding(start = 40.dp))
+                        SettingsItem(
+                            icon = Icons.Default.Policy,
+                            title = stringResource(R.string.settings_privacy_title),
+                            subtitle = stringResource(R.string.settings_privacy_subtitle),
+                            onClick = onNavigateToPrivacyPolicy
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f), thickness = 0.5.dp, modifier = Modifier.padding(start = 40.dp))
+                        SettingsItem(
+                            icon = Icons.Default.Info,
+                            title = stringResource(R.string.settings_about_title),
+                            subtitle = stringResource(R.string.settings_about_subtitle),
+                            onClick = onNavigateToAbout
+                        )
+                    }
+                }
+
+                // ── 高级 ──
+                item { SettingsSectionHeader(stringResource(R.string.settings_section_advanced)) }
+                item {
+                    SettingsGroup {
+                        SettingsItem(
+                            icon = Icons.Default.CleaningServices,
+                            title = stringResource(R.string.settings_clear_cache_title),
+                            subtitle = stringResource(R.string.settings_clear_cache_subtitle, state.cacheSize),
+                            onClick = { viewModel.showClearCacheDialog() }
+                        )
+                    }
                 }
             }
-            
-            item {
-                SettingsItem(
-                    icon = Icons.Default.Policy,
-                    title = stringResource(R.string.settings_privacy_title),
-                    subtitle = stringResource(R.string.settings_privacy_subtitle),
-                    onClick = onNavigateToPrivacyPolicy
-                )
-            }
-            
-            item {
-                SettingsItem(
-                    icon = Icons.Default.Info,
-                    title = stringResource(R.string.settings_about_title),
-                    subtitle = stringResource(R.string.settings_about_subtitle),
-                    onClick = onNavigateToAbout
-                )
-            }
-            
-            // 高级设置区域
-            item {
-                SettingsSectionHeader(title = stringResource(R.string.settings_section_advanced))
-            }
-            
-            item {
-                SettingsItem(
-                    icon = Icons.Default.CleaningServices,
-                    title = stringResource(R.string.settings_clear_cache_title),
-                    subtitle = stringResource(
-                        R.string.settings_clear_cache_subtitle,
-                        state.cacheSize
-                    ),
-                    onClick = { viewModel.showClearCacheDialog() }
-                )
-            }
-            
         }
     }
-    
-    // 主题选择对话框
-    if (showThemeDialog) {
-        ThemeSelectionDialog(
-            currentTheme = state.themeMode,
-            onThemeSelected = { theme ->
-                viewModel.setThemeMode(theme)
-                showThemeDialog = false
-            },
-            onDismiss = { showThemeDialog = false }
-        )
-    }
-    
-    // 语言选择对话框
+
+    // 语言选择对话框（需要重启，保留）
     if (state.showLanguageDialog) {
-        LanguageSelectionDialog(
-            currentLanguage = state.currentLanguage,
-            onLanguageSelected = { language: AppLanguage ->
-                viewModel.setLanguage(language)
-                viewModel.hideLanguageDialog()
-                // 提示用户需要重启应用
-                if (activity != null) {
-                    LanguageHelper.restartApp(activity)
+        AlertDialog(
+            onDismissRequest = { viewModel.hideLanguageDialog() },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text(stringResource(R.string.settings_language)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    listOf(
+                        AppLanguage.SYSTEM to stringResource(R.string.language_follow_system),
+                        AppLanguage.ENGLISH to stringResource(R.string.language_english),
+                        AppLanguage.CHINESE to stringResource(R.string.language_chinese)
+                    ).forEach { (lang, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.setLanguage(lang)
+                                    viewModel.hideLanguageDialog()
+                                    if (activity != null) LanguageHelper.restartApp(activity)
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                            if (state.currentLanguage == lang) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
                 }
             },
-            onDismiss = { viewModel.hideLanguageDialog() }
+            confirmButton = {
+                TextButton(onClick = { viewModel.hideLanguageDialog() }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            }
         )
     }
-    
+
     // 清除缓存确认对话框
     if (state.showClearCacheDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.hideClearCacheDialog() },
             containerColor = MaterialTheme.colorScheme.surface,
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.CleaningServices,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
             title = { Text(stringResource(R.string.settings_clear_cache_dialog_title)) },
             text = { Text(stringResource(R.string.settings_clear_cache_dialog_message)) },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearCache() }) {
-                    Text(
-                        stringResource(R.string.settings_clear_cache_confirm),
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Text(stringResource(R.string.settings_clear_cache_confirm), color = MaterialTheme.colorScheme.primary)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.hideClearCacheDialog() }) {
-                    Text(
-                        stringResource(R.string.action_cancel),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
     }
-    
 }
 
-/**
- * 设置区域标题
- */
 @Composable
 private fun SettingsSectionHeader(title: String) {
     Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp, end = 16.dp)
     )
 }
 
-/**
- * 设置项组件
- */
+@Composable
+private fun SettingsGroup(content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SettingsGroupHeader(title: String, icon: ImageVector) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+        Text(text = title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
 @Composable
 private fun SettingsItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     title: String,
     subtitle: String,
+    showChevron: Boolean = true,
     onClick: () -> Unit
 ) {
-    Surface(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surface
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp)
-            )
-            
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-            )
+        Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(text = title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+        if (showChevron) {
+            Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
         }
     }
 }
 
-/**
- * 主题选择对话框
- */
 @Composable
-private fun ThemeSelectionDialog(
-    currentTheme: ThemeMode,
-    onThemeSelected: (ThemeMode) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
-        icon = {
-            Icon(
-                imageVector = Icons.Default.Palette,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-        },
-        title = { Text(stringResource(R.string.settings_theme_dialog_title)) },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ThemeOption(
-                    title = stringResource(R.string.settings_theme_follow_system),
-                    selected = currentTheme == ThemeMode.SYSTEM,
-                    onClick = { onThemeSelected(ThemeMode.SYSTEM) }
-                )
-                ThemeOption(
-                    title = stringResource(R.string.settings_theme_light),
-                    selected = currentTheme == ThemeMode.LIGHT,
-                    onClick = { onThemeSelected(ThemeMode.LIGHT) }
-                )
-                ThemeOption(
-                    title = stringResource(R.string.settings_theme_dark),
-                    selected = currentTheme == ThemeMode.DARK,
-                    onClick = { onThemeSelected(ThemeMode.DARK) }
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    stringResource(R.string.action_close),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    )
-}
-
-/**
- * 主题选项组件
- */
-@Composable
-private fun ThemeOption(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
+private fun ThemeRadioRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
-        shape = MaterialTheme.shapes.small
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
-            )
-            
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
-}
-
-/**
- * 语言选择对话框
- */
-@Composable
-private fun LanguageSelectionDialog(
-    currentLanguage: AppLanguage,
-    onLanguageSelected: (AppLanguage) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
-        icon = {
-            Icon(
-                imageVector = Icons.Default.Language,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-        },
-        title = { Text(stringResource(R.string.settings_language)) },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                LanguageOption(
-                    title = stringResource(R.string.language_follow_system),
-                    selected = currentLanguage == AppLanguage.SYSTEM,
-                    onClick = { onLanguageSelected(AppLanguage.SYSTEM) }
-                )
-                LanguageOption(
-                    title = stringResource(R.string.language_english),
-                    selected = currentLanguage == AppLanguage.ENGLISH,
-                    onClick = { onLanguageSelected(AppLanguage.ENGLISH) }
-                )
-                LanguageOption(
-                    title = stringResource(R.string.language_chinese),
-                    selected = currentLanguage == AppLanguage.CHINESE,
-                    onClick = { onLanguageSelected(AppLanguage.CHINESE) }
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    stringResource(R.string.action_close),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    )
-}
-
-/**
- * 语言选项组件
- */
-@Composable
-private fun LanguageOption(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
-        shape = MaterialTheme.shapes.small
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
-            )
-            
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+        Text(text = label, style = MaterialTheme.typography.bodyMedium, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+        if (selected) {
+            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
         }
     }
 }

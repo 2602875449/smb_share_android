@@ -53,6 +53,7 @@
     <string name="hint_search_file">Search files...</string>
     <string name="empty_search_result">No matching files found</string>
     <string name="empty_folder">Folder is empty</string>
+    <string name="file_list_item_count">%1$d items</string>
     <string name="action_download">Download</string>
     <string name="action_preview">Preview</string>
     <string name="action_rename">Rename</string>

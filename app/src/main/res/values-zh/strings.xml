@@ -53,6 +53,7 @@
     <string name="hint_search_file">搜索文件...</string>
     <string name="empty_search_result">未找到匹配的文件</string>
     <string name="empty_folder">文件夹为空</string>
+    <string name="file_list_item_count">%1$d 项</string>
     <string name="action_download">下载</string>
     <string name="action_preview">预览</string>
     <string name="action_rename">重命名</string>

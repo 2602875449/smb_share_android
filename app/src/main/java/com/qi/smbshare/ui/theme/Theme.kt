@@ -3,7 +3,9 @@ package com.qi.smbshare.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -11,10 +13,19 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+
+// 工具风格的紧凑圆角，减少 M3 的大圆角胶囊感
+private val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(2.dp),
+    small = RoundedCornerShape(4.dp),
+    medium = RoundedCornerShape(6.dp),
+    large = RoundedCornerShape(8.dp),
+    extraLarge = RoundedCornerShape(10.dp)
+)
 
 // 深色主题颜色方案
 private val DarkColorScheme = darkColorScheme(
@@ -97,9 +108,12 @@ fun SmbShareAndroidTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // 设置状态栏颜色为surface颜色，与背景一致
-            window.statusBarColor = colorScheme.surface.toArgb()
-            // 根据主题设置状态栏文字颜色：深色主题用浅色文字，浅色主题用深色文字
+            // 全局启用 edge-to-edge，让各页面 toolbar 自行延伸到状态栏后方
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            // 状态栏透明，由内容背景决定视觉颜色
+            @Suppress("DEPRECATION")
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            // 根据主题设置状态栏图标颜色：浅色主题用深色图标，深色主题用浅色图标
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
@@ -107,6 +121,7 @@ fun SmbShareAndroidTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = AppShapes,
         content = content
     )
 }

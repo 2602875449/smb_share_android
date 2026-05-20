@@ -2,14 +2,15 @@ package com.qi.smbshare.ui.transfer
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -24,8 +25,6 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -34,7 +33,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -70,7 +68,7 @@ import com.qi.smbshare.util.FileTypeHelper
  * @param onOpenFile 打开文件操作
  * @param onOpenFolder 打开文件夹操作
  */
-@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TransferTaskItem(
     task: TransferTask,
@@ -87,71 +85,74 @@ fun TransferTaskItem(
     onOpenFile: () -> Unit,
     onOpenFolder: () -> Unit
 ) {
-    Card(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(
-                onClick = onItemClick,
-                onLongClick = onItemLongClick
+            .combinedClickable(onClick = onItemClick, onLongClick = onItemLongClick)
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                else MaterialTheme.colorScheme.surface
             )
-            .animateContentSize(),
-        colors = CardDefaults.cardColors(
-            containerColor = when {
-                isSelected -> MaterialTheme.colorScheme.primaryContainer
-                else -> MaterialTheme.colorScheme.surfaceVariant
-            }
-        )
+            .animateContentSize()
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(start = 12.dp, top = 8.dp, bottom = 4.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 第一行：文件信息和操作按钮
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            // 多选复选框 or 传输类型图标
+            if (isMultiSelectMode) {
+                Checkbox(checked = isSelected, onCheckedChange = { onItemClick() })
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            shape = MaterialTheme.shapes.extraSmall
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // 多选模式下的复选框
-                    if (isMultiSelectMode) {
-                        Checkbox(
-                            checked = isSelected,
-                            onCheckedChange = { onItemClick() }
-                        )
-                    }
-
-                    // 传输类型图标
                     Icon(
-                        imageVector = when (task.type) {
-                            TransferType.DOWNLOAD -> Icons.Default.FileDownload
-                            TransferType.UPLOAD -> Icons.Default.FileUpload
-                        },
-                        contentDescription = when (task.type) {
-                            TransferType.DOWNLOAD -> stringResource(R.string.transfer_type_download)
-                            TransferType.UPLOAD -> stringResource(R.string.transfer_type_upload)
-                        },
+                        imageVector = if (task.type == TransferType.DOWNLOAD) Icons.Default.FileDownload else Icons.Default.FileUpload,
+                        contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(16.dp)
                     )
+                }
+            }
 
-                    // 文件名和基本信息
-                    Column(modifier = Modifier.weight(1f)) {
+            // 文件名 + 状态/大小信息
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = task.fileName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // 状态标签
+                    if (task.status != TransferStatus.COMPLETED) {
+                        StatusChip(status = task.status)
+                    }
+                    // 进行中实时信息
+                    if (task.status == TransferStatus.ACTIVE) {
                         Text(
-                            text = task.fileName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
+                            text = "${task.progress}%  ${FileTypeHelper.formatFileSize(task.transferredBytes)}/${FileTypeHelper.formatFileSize(task.fileSize)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-
-                        // 文件大小
+                        if (task.speed > 0) {
+                            Text(
+                                text = "${FileTypeHelper.formatFileSize(task.speed)}/s",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
                         Text(
                             text = FileTypeHelper.formatFileSize(task.fileSize),
                             style = MaterialTheme.typography.bodySmall,
@@ -159,187 +160,71 @@ fun TransferTaskItem(
                         )
                     }
                 }
-
-                // 右侧操作按钮区域
-                if (!isMultiSelectMode) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        when (task.status) {
-                            TransferStatus.ACTIVE -> {
-                                // 进行中：显示暂停按钮
-                                IconButton(onClick = onPause) {
-                                    Icon(
-                                        Icons.Default.Pause,
-                                        contentDescription = stringResource(R.string.transfer_action_pause),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-
-                            TransferStatus.PAUSED -> {
-                                // 已暂停：显示继续按钮
-                                IconButton(onClick = onResume) {
-                                    Icon(
-                                        Icons.Default.PlayArrow,
-                                        contentDescription = stringResource(R.string.transfer_action_resume),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-
-                            TransferStatus.FAILED -> {
-                                // 失败：显示重试按钮
-                                IconButton(onClick = onRetry) {
-                                    Icon(
-                                        Icons.Default.Refresh,
-                                        contentDescription = stringResource(R.string.transfer_action_retry),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-
-                            TransferStatus.COMPLETED -> {
-                                // 已完成：显示打开文件/文件夹菜单（仅下载任务）
-                                if (task.type == TransferType.DOWNLOAD) {
-                                    OpenFileMenu(
-                                        onOpenFile = onOpenFile,
-                                        onOpenFolder = onOpenFolder
-                                    )
-                                }
-                            }
-
-                            TransferStatus.PENDING, TransferStatus.CANCELLED -> {
-                                // 等待中或已取消：不显示特殊操作按钮
-                            }
-                        }
-
-                        // 取消按钮（活动任务）
-                        if (task.status == TransferStatus.ACTIVE ||
-                            task.status == TransferStatus.PAUSED ||
-                            task.status == TransferStatus.PENDING
-                        ) {
-                            IconButton(onClick = onCancel) {
-                                Icon(
-                                    Icons.Default.Cancel,
-                                    contentDescription = stringResource(R.string.action_cancel),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-
-                        // 删除按钮（已完成、失败、已取消的任务）
-                        if (task.status == TransferStatus.COMPLETED ||
-                            task.status == TransferStatus.FAILED ||
-                            task.status == TransferStatus.CANCELLED
-                        ) {
-                            IconButton(onClick = onDelete) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = stringResource(R.string.action_delete),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 第二行：状态标签和实时信息
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                maxItemsInEachRow = Int.MAX_VALUE
-            ) {
-                // 状态标签（已完成状态不显示角标）
-                if (task.status != TransferStatus.COMPLETED) {
-                    StatusChip(status = task.status)
-                }
-
-                // 进行中时显示实时信息
-                if (task.status == TransferStatus.ACTIVE) {
-                    // 使用 FlowRow 让实时信息在窄屏下自动换行，避免挤在进度条上方
-                    val remainingTimeText = if (task.estimatedTimeRemaining > 0) {
-                        formatRemainingTime(task.estimatedTimeRemaining)
-                    } else {
-                        null
-                    }
-                    val infoItems = buildList {
-                        add("${task.progress}%" to MaterialTheme.colorScheme.onSurfaceVariant)
-                        add(
-                            "${FileTypeHelper.formatFileSize(task.transferredBytes)} / ${
-                                FileTypeHelper.formatFileSize(task.fileSize)
-                            }" to MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        if (task.speed > 0) {
-                            add(
-                                "${FileTypeHelper.formatFileSize(task.speed)}/s" to
-                                    MaterialTheme.colorScheme.primary
-                            )
-                        }
-
-                        if (remainingTimeText != null) {
-                            add(
-                                remainingTimeText to
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    infoItems.forEach { (text, color) ->
-                        Text(
-                            text = text,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = color
-                        )
-                    }
-                }
-            }
-
-            // 第三行：进度条（仅进行中时显示）
-            if (task.status == TransferStatus.ACTIVE) {
-                LinearProgressIndicator(
-                    progress = { task.progress / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
-            }
-
-            // 错误信息（失败时显示）
-            if (task.status == TransferStatus.FAILED && task.errorMessage != null) {
-                Text(
-                    text = stringResource(R.string.transfer_error_prefix, task.errorMessage),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-
-            // 文件失效提示（已完成的下载任务且文件不存在）
-            if (task.type == TransferType.DOWNLOAD &&
-                task.status == TransferStatus.COMPLETED &&
-                !isFileValid
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = stringResource(R.string.transfer_file_invalid),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp)
-                    )
+                // 失败信息
+                if (task.status == TransferStatus.FAILED && task.errorMessage != null) {
                     Text(
-                        text = stringResource(R.string.transfer_file_invalid_message),
+                        text = stringResource(R.string.transfer_error_prefix, task.errorMessage),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+                // 文件失效提示
+                if (task.type == TransferType.DOWNLOAD && task.status == TransferStatus.COMPLETED && !isFileValid) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(12.dp))
+                        Text(
+                            text = stringResource(R.string.transfer_file_invalid_message),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
             }
+
+            // 操作按钮（右侧，仅非多选模式）
+            if (!isMultiSelectMode) {
+                Row(horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
+                    when (task.status) {
+                        TransferStatus.ACTIVE -> IconButton(onClick = onPause) {
+                            Icon(Icons.Default.Pause, contentDescription = stringResource(R.string.transfer_action_pause), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        }
+                        TransferStatus.PAUSED -> IconButton(onClick = onResume) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.transfer_action_resume), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        }
+                        TransferStatus.FAILED -> IconButton(onClick = onRetry) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.transfer_action_retry), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        }
+                        TransferStatus.COMPLETED -> if (task.type == TransferType.DOWNLOAD) {
+                            OpenFileMenu(onOpenFile = onOpenFile, onOpenFolder = onOpenFolder)
+                        }
+                        else -> {}
+                    }
+                    if (task.status in listOf(TransferStatus.ACTIVE, TransferStatus.PAUSED, TransferStatus.PENDING)) {
+                        IconButton(onClick = onCancel) {
+                            Icon(Icons.Default.Cancel, contentDescription = stringResource(R.string.action_cancel), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    if (task.status in listOf(TransferStatus.COMPLETED, TransferStatus.FAILED, TransferStatus.CANCELLED)) {
+                        IconButton(onClick = onDelete) {
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // 内嵌进度条（进行中，贴底，无圆角）
+        if (task.status == TransferStatus.ACTIVE) {
+            LinearProgressIndicator(
+                progress = { task.progress / 100f },
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)))
         }
     }
 }
@@ -359,15 +244,15 @@ private fun StatusChip(status: TransferStatus) {
         TransferStatus.CANCELLED -> stringResource(R.string.transfer_status_cancelled) to MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    Surface(
-        color = color.copy(alpha = 0.2f),
-        shape = MaterialTheme.shapes.small
+    Box(
+        modifier = Modifier
+            .background(color = color.copy(alpha = 0.15f), shape = MaterialTheme.shapes.extraSmall)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = color,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            color = color
         )
     }
 }

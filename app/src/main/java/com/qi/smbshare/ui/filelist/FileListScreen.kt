@@ -3,11 +3,14 @@ package com.qi.smbshare.ui.filelist
 import android.content.ClipData
 import android.content.Intent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,17 +22,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
@@ -37,28 +38,26 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FabPosition
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -77,15 +76,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qi.smbshare.R
 import com.qi.smbshare.data.model.FileItem
 import com.qi.smbshare.ui.components.PredictiveBackAnimatedContent
@@ -97,7 +95,6 @@ import com.qi.smbshare.util.PermissionManager
 import java.io.File
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileListScreen(
     viewModel: FileListViewModel,
@@ -109,7 +106,7 @@ fun FileListScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var folderName by remember { mutableStateOf("") }
     var renameName by remember { mutableStateOf("") }
-    var showFabMenu by remember { mutableStateOf(false) }
+    var isSearchActive by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = context as? ComponentActivity
     val view = LocalView.current
@@ -121,20 +118,17 @@ fun FileListScreen(
     val topBarColor = MaterialTheme.colorScheme.surface
     val useLightStatusBarIcons = topBarColor.luminance() > 0.5f
 
-    @Suppress("DEPRECATION")
-    DisposableEffect(activity, view, topBarColor, useLightStatusBarIcons) {
+    // edge-to-edge 已在 Theme 全局启用，此处仅根据 toolbar 亮度调整状态栏图标颜色
+    DisposableEffect(activity, view, useLightStatusBarIcons) {
         val window = activity?.window
         if (window != null) {
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            window.statusBarColor = Color.Transparent.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
                 useLightStatusBarIcons
         }
 
         onDispose {
+            // 离开文件列表时恢复为跟随主题的状态栏图标颜色
             if (window != null) {
-                WindowCompat.setDecorFitsSystemWindows(window, true)
-                window.statusBarColor = topBarColor.toArgb()
                 WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
                     useLightStatusBarIcons
             }
@@ -292,282 +286,289 @@ fun FileListScreen(
         }
     }
 
-    // 所有层级返回统一走预测式返回动画，包括子目录返回上级
+    // 搜索激活时聚焦输入框
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) searchFocusRequester.requestFocus()
+    }
+
+    // 子目录返回上级 / 搜索关闭走普通 BackHandler，不带预测式动画
+    BackHandler(enabled = isSearchActive || state.canGoBack) {
+        when {
+            isSearchActive -> {
+                isSearchActive = false
+                viewModel.handleIntent(FileListIntent.UpdateSearchQuery(""))
+                focusManager.clearFocus()
+            }
+            state.canGoBack -> viewModel.handleIntent(FileListIntent.GoBack)
+            else -> { /* 不会到达，由下方 PredictiveBackAnimatedContent 处理 */ }
+        }
+    }
+
+    // 仅根文件页返回连接页参与预测式返回动画（页面级返回）
     PredictiveBackAnimatedContent(
-        onBack = handleFileListBack
+        enabled = !state.canGoBack && !isSearchActive,
+        onBack = onBack
     ) { predictiveBackModifier ->
         Scaffold(
             modifier = predictiveBackModifier,
-            snackbarHost = {
-                SnackbarHost(hostState = snackbarHostState)
-            },
-            topBar = {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 4.dp
-                ) {
-                    // 普通模式：显示标题和当前连接
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .statusBarsPadding()
-                            .height(64.dp)
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        IconButton(onClick = {
-                            if (state.canGoBack) {
-                                viewModel.handleIntent(FileListIntent.GoBack)
-                            } else {
-                                onBack()
-                            }
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.desc_back_to_connection))
-                        }
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.title_file_list),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = "${config.serverAddress}:${config.port}/${config.shareName}",
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (state.canGoBack) {
-                            IconButton(onClick = { viewModel.handleIntent(FileListIntent.GoBack) }) {
-                                Icon(Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.desc_parent_directory))
-                            }
-                        }
-                        IconButton(onClick = { viewModel.handleIntent(FileListIntent.LoadFiles) }) {
-                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.desc_refresh))
-                        }
-                    }
-                }
-            },
-            floatingActionButton = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    // FAB菜单项 - 只在展开时显示
-                    if (showFabMenu) {
-                        // 上传文件按钮
-                        FloatingActionButton(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                                    type = "*/*"
-                                    addCategory(Intent.CATEGORY_OPENABLE)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-                                }
-                                filePickerLauncher.launch(intent)
-                                showFabMenu = false
-                            },
-                            modifier = Modifier.size(56.dp)
-                        ) {
-                            Icon(Icons.Default.Upload, contentDescription = stringResource(R.string.action_upload_file))
-                        }
-                        // 新建文件夹按钮
-                        FloatingActionButton(
-                            onClick = {
-                                viewModel.handleIntent(FileListIntent.ShowCreateFolderDialog)
-                                showFabMenu = false
-                            },
-                            modifier = Modifier.size(56.dp)
-                        ) {
-                            Icon(Icons.Default.CreateNewFolder, contentDescription = stringResource(R.string.action_new_folder))
-                        }
-                    }
-                    // 主FAB按钮 - 始终显示
-                    FloatingActionButton(
-                        onClick = { showFabMenu = !showFabMenu }
-                    ) {
-                        Icon(
-                            if (showFabMenu) Icons.Default.Close else Icons.Default.Add,
-                            contentDescription = if (showFabMenu) stringResource(R.string.desc_close_menu) else stringResource(R.string.desc_open_menu)
-                        )
-                    }
-                }
-            },
-            floatingActionButtonPosition = FabPosition.End
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
         ) { padding ->
-            Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                // 工具栏（双模式：普通 / 搜索）
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
-                    PathBreadcrumbBar(
-                        serverPath = "${config.serverAddress}:${config.port}/${config.shareName}",
-                        currentPath = state.currentPath,
-                        onPathClick = { path ->
-                            focusManager.clearFocus()
-                            viewModel.handleIntent(FileListIntent.JumpToPath(path))
-                        },
-                        onCopyPath = { path ->
-                            val clipboardManager = context.getSystemService(
-                                android.content.ClipboardManager::class.java
-                            )
-                            clipboardManager.setPrimaryClip(
-                                ClipData.newPlainText(context.getString(R.string.label_path), path)
-                            )
-                            snackbarHostState.currentSnackbarData?.dismiss()
-                            // 复制是纯本地反馈，不进入 ViewModel 状态，避免与文件操作提示互相覆盖。
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar(pathCopiedMessage)
-                            }
-                        }
-                    )
-
-                    // 搜索栏 - 始终显示在文件列表上方
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color.Transparent,
-                        tonalElevation = 2.dp
-                    ) {
+                    if (isSearchActive) {
+                        // 搜索模式工具栏
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                .statusBarsPadding()
+                                .height(52.dp)
+                                .padding(end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            IconButton(onClick = {
+                                isSearchActive = false
+                                viewModel.handleIntent(FileListIntent.UpdateSearchQuery(""))
+                                focusManager.clearFocus()
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                            }
                             TextField(
                                 value = state.searchQuery,
-                                onValueChange = { query ->
-                                    viewModel.handleIntent(FileListIntent.UpdateSearchQuery(query))
-                                },
-                                placeholder = { Text(stringResource(R.string.hint_search_file)) },
+                                onValueChange = { viewModel.handleIntent(FileListIntent.UpdateSearchQuery(it)) },
+                                placeholder = { Text(stringResource(R.string.hint_search_file), style = MaterialTheme.typography.bodyMedium) },
                                 singleLine = true,
                                 modifier = Modifier
                                     .weight(1f)
                                     .focusRequester(searchFocusRequester),
-                                leadingIcon = {
-                                    Icon(Icons.Default.Search, contentDescription = stringResource(R.string.desc_search))
-                                },
-                                trailingIcon = {
-                                    if (state.searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = {
-                                            viewModel.handleIntent(
-                                                FileListIntent.UpdateSearchQuery("")
-                                            )
-                                            focusManager.clearFocus()
-                                        }) {
-                                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.desc_clear))
-                                        }
-                                    }
-                                },
                                 colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent
                                 )
                             )
-                        }
-                    }
-
-                    // 操作进度提示 - 轻量级顶部进度条
-                    if (state.isOperating) {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    // 文件列表内容
-                    if (state.isLoading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    } else if (state.filteredFiles.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (state.searchQuery.isNotEmpty()) stringResource(R.string.empty_search_result) else stringResource(R.string.empty_folder),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                            if (state.searchQuery.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    viewModel.handleIntent(FileListIntent.UpdateSearchQuery(""))
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.desc_clear), modifier = Modifier.size(18.dp))
+                                }
+                            }
                         }
                     } else {
-                        LazyColumn(
+                        // 普通模式工具栏：back | breadcrumb | 搜索 | ⋮
+                        var showOverflowMenu by remember { mutableStateOf(false) }
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .clickable(
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    // 点击列表空白区域时清除焦点，关闭键盘
-                                    focusManager.clearFocus()
-                                },
-                            contentPadding = PaddingValues(
-                                start = 8.dp,
-                                top = 8.dp,
-                                end = 8.dp,
-                                bottom = 96.dp
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .fillMaxWidth()
+                                .statusBarsPadding()
+                                .height(52.dp)
+                                .padding(end = 0.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            items(state.filteredFiles) { file ->
-                                FileItemRow(
-                                    file = file,
-                                    onClick = {
-                                        // 清除搜索框焦点
-                                        focusManager.clearFocus()
-                                        if (file.isDirectory) {
-                                            viewModel.handleIntent(FileListIntent.EnterDirectory(file.name))
-                                        } else {
-                                            // 点击文件显示操作菜单
-                                            viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
-                                        }
-                                    },
-                                    onLongClick = {
-                                        // 清除搜索框焦点
-                                        focusManager.clearFocus()
-                                        // 长按显示操作菜单（文件和目录都支持）
-                                        viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
-                                    },
-                                    showMenu = state.fileMenuPath == file.path,
-                                    onMenuDismiss = {
-                                        viewModel.handleIntent(FileListIntent.HideFileMenu)
-                                    },
-                                    onDownload = {
-                                        checkPermissionAndDownload(file.path, file.name)
-                                        viewModel.handleIntent(FileListIntent.HideFileMenu)
-                                    },
-                                    onPreview = {
-                                        viewModel.handleIntent(
-                                            FileListIntent.PreviewFile(file.path, file.name)
+                            IconButton(onClick = {
+                                if (state.canGoBack) viewModel.handleIntent(FileListIntent.GoBack) else onBack()
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.desc_back_to_connection))
+                            }
+                            // 面包屑横向滚动区域
+                            val breadcrumbScrollState = rememberScrollState()
+                            val breadcrumbRootLabel = stringResource(R.string.breadcrumb_root)
+                            val breadcrumbSegments = remember(state.currentPath, breadcrumbRootLabel) {
+                                buildBreadcrumbSegments(state.currentPath, breadcrumbRootLabel)
+                            }
+                            LaunchedEffect(state.currentPath, breadcrumbScrollState.maxValue) {
+                                if (breadcrumbScrollState.maxValue > 0) breadcrumbScrollState.animateScrollTo(breadcrumbScrollState.maxValue)
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .horizontalScroll(breadcrumbScrollState),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                breadcrumbSegments.forEachIndexed { index, segment ->
+                                    val isLast = index == breadcrumbSegments.lastIndex
+                                    if (index == 0) {
+                                        Icon(
+                                            Icons.Default.Home,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(14.dp)
+                                                .clickable(enabled = !isLast) { viewModel.handleIntent(FileListIntent.JumpToPath(segment.path)) },
+                                            tint = if (isLast) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                    },
-                                    onDelete = {
-                                        viewModel.handleIntent(FileListIntent.DeleteFile(file.path, file.isDirectory))
-                                        viewModel.handleIntent(FileListIntent.HideFileMenu)
-                                    },
-                                    onRename = {
-                                        viewModel.handleIntent(
-                                            FileListIntent.ShowRenameDialog(file.path, file.name)
+                                    } else {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.NavigateNext,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                         )
-                                        viewModel.handleIntent(FileListIntent.HideFileMenu)
+                                        Text(
+                                            text = segment.name,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isLast) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.clickable(enabled = !isLast) { viewModel.handleIntent(FileListIntent.JumpToPath(segment.path)) }
+                                        )
                                     }
-                                )
+                                }
+                            }
+                            // 搜索图标
+                            IconButton(onClick = { isSearchActive = true }) {
+                                Icon(Icons.Default.Search, contentDescription = stringResource(R.string.desc_search), modifier = Modifier.size(20.dp))
+                            }
+                            // 溢出菜单（刷新/上传/新建文件夹/复制路径）
+                            Box {
+                                IconButton(onClick = { showOverflowMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = null, modifier = Modifier.size(20.dp))
+                                }
+                                DropdownMenu(
+                                    expanded = showOverflowMenu,
+                                    onDismissRequest = { showOverflowMenu = false },
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.desc_refresh), style = MaterialTheme.typography.bodyMedium) },
+                                        leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                        onClick = { viewModel.handleIntent(FileListIntent.LoadFiles); showOverflowMenu = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_upload_file), style = MaterialTheme.typography.bodyMedium) },
+                                        leadingIcon = { Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                                type = "*/*"
+                                                addCategory(Intent.CATEGORY_OPENABLE)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                                            }
+                                            filePickerLauncher.launch(intent)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_new_folder), style = MaterialTheme.typography.bodyMedium) },
+                                        leadingIcon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                        onClick = { viewModel.handleIntent(FileListIntent.ShowCreateFolderDialog); showOverflowMenu = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.desc_copy_path), style = MaterialTheme.typography.bodyMedium) },
+                                        leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            val fullPath = buildFullSmbPath(
+                                                "${config.serverAddress}:${config.port}/${config.shareName}",
+                                                state.currentPath
+                                            )
+                                            val clipboardManager = context.getSystemService(android.content.ClipboardManager::class.java)
+                                            clipboardManager.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.label_path), fullPath))
+                                            coroutineScope.launch { snackbarHostState.showSnackbar(pathCopiedMessage) }
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.5.dp)
                 }
+
+                // 操作进度条
+                if (state.isOperating) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary)
+                }
+
+                // 文件列表内容
+                if (state.isLoading) {
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else if (state.filteredFiles.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = if (state.searchQuery.isNotEmpty()) stringResource(R.string.empty_search_result) else stringResource(R.string.empty_folder),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { focusManager.clearFocus() },
+                        contentPadding = PaddingValues(bottom = 8.dp)
+                    ) {
+                        items(state.filteredFiles) { file ->
+                            FileItemRow(
+                                file = file,
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    if (file.isDirectory) {
+                                        viewModel.handleIntent(FileListIntent.EnterDirectory(file.name))
+                                    } else {
+                                        viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
+                                    }
+                                },
+                                onLongClick = {
+                                    focusManager.clearFocus()
+                                    viewModel.handleIntent(FileListIntent.ShowFileMenu(file.path))
+                                },
+                                showMenu = state.fileMenuPath == file.path,
+                                onMenuDismiss = { viewModel.handleIntent(FileListIntent.HideFileMenu) },
+                                onDownload = {
+                                    checkPermissionAndDownload(file.path, file.name)
+                                    viewModel.handleIntent(FileListIntent.HideFileMenu)
+                                },
+                                onPreview = { viewModel.handleIntent(FileListIntent.PreviewFile(file.path, file.name)) },
+                                onDelete = {
+                                    viewModel.handleIntent(FileListIntent.DeleteFile(file.path, file.isDirectory))
+                                    viewModel.handleIntent(FileListIntent.HideFileMenu)
+                                },
+                                onRename = {
+                                    viewModel.handleIntent(FileListIntent.ShowRenameDialog(file.path, file.name))
+                                    viewModel.handleIntent(FileListIntent.HideFileMenu)
+                                }
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 52.dp),
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                thickness = 0.5.dp
+                            )
+                        }
+                    }
+                }
+
+                // 底部状态栏：显示项目数量
+                if (!state.isLoading) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), thickness = 0.5.dp)
+                    Text(
+                        text = stringResource(R.string.file_list_item_count, state.filteredFiles.size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.surface)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // 对话框区域（覆盖在内容上方）
+            Box {
 
                 // 操作结果和普通错误都通过 Snackbar 显示，页面内只保留内容状态
 
@@ -745,106 +746,6 @@ private data class BreadcrumbSegment(
     val path: String
 )
 
-@Composable
-private fun PathBreadcrumbBar(
-    serverPath: String,
-    currentPath: String,
-    onPathClick: (String) -> Unit,
-    onCopyPath: (String) -> Unit
-) {
-    val scrollState = rememberScrollState()
-    val rootLabel = stringResource(R.string.breadcrumb_root)
-    val segments = remember(currentPath, rootLabel) {
-        buildBreadcrumbSegments(currentPath, rootLabel)
-    }
-    val fullPath = remember(serverPath, currentPath) {
-        buildFullSmbPath(serverPath, currentPath)
-    }
-
-    LaunchedEffect(currentPath, scrollState.maxValue) {
-        if (scrollState.maxValue > 0) {
-            scrollState.animateScrollTo(scrollState.maxValue)
-        }
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(scrollState),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                segments.forEachIndexed { index, segment ->
-                    val isLast = index == segments.lastIndex
-                    Row(
-                        modifier = Modifier
-                            .clickable(enabled = !isLast) { onPathClick(segment.path) }
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        if (index == 0) {
-                            Icon(
-                                imageVector = Icons.Default.Home,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = if (isLast) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
-                        }
-                        Text(
-                            text = segment.name,
-                            style = if (isLast) {
-                                MaterialTheme.typography.bodyMedium
-                            } else {
-                                MaterialTheme.typography.bodySmall
-                            },
-                            color = if (isLast) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    if (!isLast) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.NavigateNext,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            IconButton(onClick = { onCopyPath(fullPath) }) {
-                Icon(
-                    imageVector = Icons.Default.ContentCopy,
-                    contentDescription = stringResource(R.string.desc_copy_path),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
 private fun buildBreadcrumbSegments(currentPath: String, rootLabel: String): List<BreadcrumbSegment> {
     val parts = currentPath
         .trim('\\', '/')
@@ -885,138 +786,123 @@ private fun FileItemRow(
     onDelete: () -> Unit = {},
     onRename: () -> Unit = {}
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            ),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 0.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
+        // 文件类型色标图标
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(28.dp)
+                .background(
+                    color = fileIconTint(file).copy(alpha = 0.12f),
+                    shape = MaterialTheme.shapes.extraSmall
+                ),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (file.isDirectory) {
-                    Icons.Default.Folder
-                } else {
-                    Icons.AutoMirrored.Filled.InsertDriveFile
-                },
+                imageVector = fileIcon(file),
                 contentDescription = null,
-                modifier = Modifier.size(40.dp),
-                tint = if (file.isDirectory) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                tint = fileIconTint(file),
+                modifier = Modifier.size(16.dp)
             )
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = file.name,
-                    style = MaterialTheme.typography.bodyLarge
-                    // 移除 maxLines 限制，让长文件名完整显示并自动换行
-                )
-                if (!file.isDirectory) {
+        }
+
+        // 文件名 + 元信息（右侧）
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = file.name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!file.isDirectory) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = FileTypeHelper.formatFileSize(file.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-                file.lastModified?.let { date ->
-                    Text(
-                        text = FileTypeHelper.formatDate(date),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            // 文件和目录都显示操作菜单按钮
-            Box {
-                IconButton(onClick = onLongClick) {
-                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.action_more_options))
-                }
-
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = onMenuDismiss,
-                    containerColor = MaterialTheme.colorScheme.surface
-                ) {
-                    // 只有文件才显示下载和预览选项
-                    if (!file.isDirectory) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_download)) },
-                            colors = MenuDefaults.itemColors(
-                                textColor = MaterialTheme.colorScheme.onSurface,
-                                leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            onClick = {
-                                onDownload()
-                                onMenuDismiss()
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Download, contentDescription = null)
-                            }
+                    file.lastModified?.let { date ->
+                        Text(
+                            text = FileTypeHelper.formatDate(date),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
-                        // 仅对可预览类型（图片/文本/视频）显示预览入口
-                        if (com.qi.smbshare.util.FileTypeHelper.isPreviewable(file.name)) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.action_preview)) },
-                                colors = MenuDefaults.itemColors(
-                                    textColor = MaterialTheme.colorScheme.onSurface,
-                                    leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                onClick = {
-                                    onPreview()
-                                    onMenuDismiss()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Search, contentDescription = null)
-                                }
-                            )
-                        }
                     }
-                    // 重命名选项（文件和目录都支持）
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_rename)) },
-                        colors = MenuDefaults.itemColors(
-                            textColor = MaterialTheme.colorScheme.onSurface,
-                            leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        onClick = {
-                            onRename()
-                            onMenuDismiss()
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.Edit, contentDescription = null)
-                        }
-                    )
-                    // 删除选项（文件和目录都支持）
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_delete)) },
-                        colors = MenuDefaults.itemColors(
-                            textColor = MaterialTheme.colorScheme.error,
-                            leadingIconColor = MaterialTheme.colorScheme.error
-                        ),
-                        onClick = {
-                            onDelete()
-                            onMenuDismiss()
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.Delete, contentDescription = null)
-                        }
-                    )
                 }
             }
         }
+
+        // ⋮ 操作菜单
+        Box {
+            IconButton(onClick = onLongClick) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.action_more_options),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = onMenuDismiss,
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                if (!file.isDirectory) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_download), style = MaterialTheme.typography.bodyMedium) },
+                        leadingIcon = { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.onSurface, leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                        onClick = { onDownload(); onMenuDismiss() }
+                    )
+                    if (FileTypeHelper.isPreviewable(file.name)) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_preview), style = MaterialTheme.typography.bodyMedium) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.onSurface, leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                            onClick = { onPreview(); onMenuDismiss() }
+                        )
+                    }
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_rename), style = MaterialTheme.typography.bodyMedium) },
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.onSurface, leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                    onClick = { onRename(); onMenuDismiss() }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_delete), style = MaterialTheme.typography.bodyMedium) },
+                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.error, leadingIconColor = MaterialTheme.colorScheme.error),
+                    onClick = { onDelete(); onMenuDismiss() }
+                )
+            }
+        }
     }
+}
+
+@Composable
+private fun fileIcon(file: FileItem) = when {
+    file.isDirectory -> Icons.Default.Folder
+    FileTypeHelper.isImageFile(file.name) -> Icons.Default.Image
+    FileTypeHelper.isVideoFile(file.name) -> Icons.Default.VideoFile
+    FileTypeHelper.isTextFile(file.name) -> Icons.AutoMirrored.Filled.InsertDriveFile
+    file.name.lowercase().endsWith(".pdf") -> Icons.Default.PictureAsPdf
+    file.name.lowercase().let { it.endsWith(".mp3") || it.endsWith(".flac") || it.endsWith(".aac") || it.endsWith(".ogg") } -> Icons.Default.AudioFile
+    else -> Icons.AutoMirrored.Filled.InsertDriveFile
+}
+
+@Composable
+private fun fileIconTint(file: FileItem) = when {
+    file.isDirectory -> MaterialTheme.colorScheme.primary
+    FileTypeHelper.isImageFile(file.name) -> MaterialTheme.colorScheme.tertiary
+    FileTypeHelper.isVideoFile(file.name) -> MaterialTheme.colorScheme.secondary
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }

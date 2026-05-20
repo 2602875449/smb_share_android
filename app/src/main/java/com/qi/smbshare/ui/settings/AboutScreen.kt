@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -65,18 +67,21 @@ fun AboutScreen(
 
     Scaffold(
         modifier = modifier,
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            Surface(
-                color = Color.Transparent,
-                tonalElevation = 4.dp
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
-                        .padding(horizontal = 16.dp),
+                        .statusBarsPadding()
+                        .height(52.dp)
+                        .padding(end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     IconButton(onClick = onBack) {
                         Icon(
